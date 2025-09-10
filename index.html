@@ -2,105 +2,36 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Peer-to-Peer Chat (Persistent ID)</title>
-  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  <title>Login - Peer Chat</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #f0f2f5; padding: 20px; }
-    .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
-    h2 { text-align: center; margin-bottom: 20px; }
-    #chat { border: 1px solid #ccc; border-radius: 8px; height: 250px; overflow-y: auto; padding: 10px; background: #fafafa; margin-bottom: 10px; }
-    input[type=text] { width: 75%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; margin-right: 6px; }
-    button { padding: 8px 14px; border-radius: 6px; border: none; background: #4a90e2; color: white; font-weight: bold; cursor: pointer; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    label { font-weight: bold; display: block; margin-bottom: 6px; }
-    .small { font-size: 12px; color: #555; margin-top: 4px; }
+    body { font-family: Arial, sans-serif; background: #f0f2f5; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; }
+    .login-container { background:white; padding:30px; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.08); text-align:center; width:300px; }
+    input { width: 90%; padding:10px; margin:10px 0; border-radius:6px; border:1px solid #ccc; }
+    button { padding:10px 20px; border-radius:6px; border:none; background:#4a90e2; color:white; font-weight:bold; cursor:pointer; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Peer-to-Peer Chat (Persistent ID)</h2>
-
-    <label>Your Peer ID (persistent, share this with friend)</label>
-    <input type="text" id="myId" readonly>
-
-    <label>Connect to Peer ID</label>
-    <input type="text" id="connectId" placeholder="Enter friend’s ID">
-    <button id="connectBtn">Connect</button>
-
-    <div id="chat"></div>
-    <div style="display:flex;">
-      <input type="text" id="msgInput" placeholder="Type a message" disabled>
-      <button id="sendBtn" disabled>Send</button>
-    </div>
-    <div class="small">Messages go peer-to-peer automatically. No JSON copy-paste needed.</div>
+  <div class="login-container">
+    <h2>Login to Peer Chat</h2>
+    <input type="text" id="username" placeholder="Enter your username">
+    <input type="text" id="room" placeholder="Enter room name">
+    <br>
+    <button id="joinBtn">Join Chat</button>
   </div>
 
   <script>
-    let chatBox = document.getElementById('chat');
-    let msgInput = document.getElementById('msgInput');
-    let sendBtn = document.getElementById('sendBtn');
-    let myIdInput = document.getElementById('myId');
-    let conn = null;
-
-    function appendMessage(msg, who='Peer'){
-      chatBox.innerHTML += `<div><b>${who}:</b> ${msg}</div>`;
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
-
-    // Retrieve existing ID from localStorage or generate a random one
-    let savedId = localStorage.getItem('peerId') || 'user-' + Math.floor(Math.random()*1000000);
-    localStorage.setItem('peerId', savedId);
-
-    // Create PeerJS peer with persistent ID
-    let peer = new Peer(savedId);
-
-    peer.on('open', id => {
-      myIdInput.value = id;
-      console.log('My Peer ID:', id);
-    });
-
-    // Handle incoming connections
-    peer.on('connection', c => {
-      conn = c;
-      setupConnection();
-    });
-
-    document.getElementById('connectBtn').onclick = () => {
-      const targetId = document.getElementById('connectId').value.trim();
-      if(!targetId) return;
-      conn = peer.connect(targetId);
-      setupConnection();
-    };
-
-    function setupConnection(){
-      if(!conn) return;
-      conn.on('open', () => {
-        appendMessage('Connected to peer!', 'System');
-        msgInput.disabled = false;
-        sendBtn.disabled = false;
-      });
-
-      conn.on('data', data => {
-        appendMessage(data, 'Peer');
-      });
-
-      conn.on('close', () => {
-        appendMessage('Connection closed.', 'System');
-        msgInput.disabled = true;
-        sendBtn.disabled = true;
-      });
-
-      conn.on('error', err => {
-        appendMessage('Error: ' + err, 'System');
-      });
-    }
-
-    sendBtn.onclick = () => {
-      const text = msgInput.value.trim();
-      if(!text || !conn || conn.open===false) return;
-      conn.send(text);
-      appendMessage(text, 'You');
-      msgInput.value = '';
+    document.getElementById('joinBtn').onclick = () => {
+      const username = document.getElementById('username').value.trim();
+      const room = document.getElementById('room').value.trim();
+      if(!username || !room){
+        alert('Please enter username and room name.');
+        return;
+      }
+      // Save username and room to sessionStorage
+      sessionStorage.setItem('username', username);
+      sessionStorage.setItem('room', room);
+      // Redirect to chat page
+      window.location.href = 'chat.html';
     };
   </script>
 </body>
