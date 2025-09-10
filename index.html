@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Local Chat</title>
+  <style>
+    body { font-family: Arial; }
+    #chat { border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: auto; }
+    input { width: 70%; }
+  </style>
+</head>
+<body>
+  <h2>Local Chat (no backend)</h2>
+  <div id="chat"></div>
+  <input id="msg" placeholder="Type a message">
+  <button onclick="send()">Send</button>
+
+  <script>
+    const chatBox = document.getElementById("chat");
+
+    function render() {
+      chatBox.innerHTML = "";
+      let messages = JSON.parse(localStorage.getItem("messages") || "[]");
+      messages.forEach(m => {
+        chatBox.innerHTML += "<p>" + m + "</p>";
+      });
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function send() {
+      let input = document.getElementById("msg");
+      let messages = JSON.parse(localStorage.getItem("messages") || "[]");
+      messages.push(input.value);
+      localStorage.setItem("messages", JSON.stringify(messages));
+      input.value = "";
+      render();
+    }
+
+    render();
+  </script>
+</body>
+</html>
