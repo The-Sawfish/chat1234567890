@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Peer-to-Peer Chat (Automatic)</title>
+  <title>Peer-to-Peer Chat (Persistent ID)</title>
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; background: #f0f2f5; padding: 20px; }
@@ -18,11 +18,11 @@
 </head>
 <body>
   <div class="container">
-    <h2>Peer-to-Peer Chat (Automatic)</h2>
+    <h2>Peer-to-Peer Chat (Persistent ID)</h2>
 
-    <label>Your Peer ID (auto-generated, share this with friend)</label>
+    <label>Your Peer ID (persistent, share this with friend)</label>
     <input type="text" id="myId" readonly>
-    
+
     <label>Connect to Peer ID</label>
     <input type="text" id="connectId" placeholder="Enter friend’s ID">
     <button id="connectBtn">Connect</button>
@@ -36,24 +36,30 @@
   </div>
 
   <script>
-    let peer = new Peer(); // create a PeerJS peer with random ID
-    let conn = null;
     let chatBox = document.getElementById('chat');
-    let myIdInput = document.getElementById('myId');
     let msgInput = document.getElementById('msgInput');
     let sendBtn = document.getElementById('sendBtn');
+    let myIdInput = document.getElementById('myId');
+    let conn = null;
 
     function appendMessage(msg, who='Peer'){
       chatBox.innerHTML += `<div><b>${who}:</b> ${msg}</div>`;
       chatBox.scrollTop = chatBox.scrollHeight;
     }
 
+    // Retrieve existing ID from localStorage or generate a random one
+    let savedId = localStorage.getItem('peerId') || 'user-' + Math.floor(Math.random()*1000000);
+    localStorage.setItem('peerId', savedId);
+
+    // Create PeerJS peer with persistent ID
+    let peer = new Peer(savedId);
+
     peer.on('open', id => {
       myIdInput.value = id;
       console.log('My Peer ID:', id);
     });
 
-    // Incoming connection
+    // Handle incoming connections
     peer.on('connection', c => {
       conn = c;
       setupConnection();
@@ -67,6 +73,7 @@
     };
 
     function setupConnection(){
+      if(!conn) return;
       conn.on('open', () => {
         appendMessage('Connected to peer!', 'System');
         msgInput.disabled = false;
