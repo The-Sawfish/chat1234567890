@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Login - Mobile Chat</title>
+<title>Login - Chat</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 body{margin:0;font-family:Arial,sans-serif;background:#f0f2f5;display:flex;justify-content:center;align-items:center;height:100vh;}
@@ -19,7 +19,7 @@ button{padding:10px 20px;border-radius:6px;border:none;background:#4a90e2;color:
 <br>
 <button id="loginBtn">Login</button>
 <br><br>
-<a href="signup.html">Don't have an account? Signup</a>
+<a href="signup.html">Create Account</a>
 </div>
 
 <script>
@@ -29,7 +29,6 @@ document.getElementById('loginBtn').onclick=()=>{
   if(!username||!password){alert('Enter username and password');return;}
   let users=JSON.parse(localStorage.getItem('users')||'{}');
   if(users[username]!==password){alert('Invalid username or password');return;}
-  // Save username in sessionStorage
   sessionStorage.setItem('username',username);
   window.location.href='chat.html';
 }
