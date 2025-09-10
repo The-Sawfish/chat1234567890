@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Hybrid Chat — Settings Fixed</title>
+<title>Hybrid Chat — Settings Updated</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <style>
@@ -96,9 +96,6 @@
     <label for="newUsername">Change Username</label>
     <input id="newUsername" type="text" placeholder="New username">
 
-    <label for="newPassword">Change Password</label>
-    <input id="newPassword" type="password" placeholder="New password">
-
     <button id="saveSettings" class="sbtn">Save changes</button>
     <button id="clearChats" class="sbtn secondary">Clear all chats</button>
     <button id="logoutBtn" class="sbtn secondary">Logout</button>
@@ -109,9 +106,8 @@
 <script>
 /* --------------------------
    Helper: same hash used by signup/login
-   -------------------------- */
+-------------------------- */
 function hash(str){
-  // simple deterministic JS hash (same as earlier signup/login)
   let h = 0;
   for (let i = 0; i < str.length; i++) {
     h = ((h << 5) - h) + str.charCodeAt(i);
@@ -145,7 +141,6 @@ const addFriendBtn = document.getElementById('addFriend');
 const settingsBtn = document.getElementById('settingsBtn');
 const settingsModal = document.getElementById('settingsModal');
 const newUsernameInput = document.getElementById('newUsername');
-const newPasswordInput = document.getElementById('newPassword');
 const saveSettingsBtn = document.getElementById('saveSettings');
 const clearChatsBtn = document.getElementById('clearChats');
 const logoutBtn = document.getElementById('logoutBtn');
@@ -154,7 +149,7 @@ const themeToggle = document.getElementById('themeToggle');
 
 let currentRoom = 'Global';
 let peer = null;
-let connections = {}; // peerId => DataConnection
+let connections = {}; 
 
 /* ========= Utilities ========= */
 function saveState(){
@@ -169,7 +164,6 @@ function makeId(){ return Date.now().toString(36) + '-' + Math.random().toString
 /* ======= Rendering ======= */
 function renderRooms(){
   roomsContainer.innerHTML = '';
-  // Global button
   const globalBtn = document.createElement('button');
   globalBtn.className = 'room-btn' + (currentRoom === 'Global' ? ' active' : '');
   globalBtn.dataset.room = 'Global';
@@ -190,7 +184,6 @@ function renderRooms(){
     const badgeHTML = (unread[rk] ? `<span class="badge">${unread[rk]}</span>` : '');
     btn.innerHTML = `<span class="room-label">💬 ${label}</span>${badgeHTML}`;
     btn.onclick = ()=>switchRoom(rk);
-    // delete icon
     const del = document.createElement('button');
     del.className = 'delete-btn';
     del.innerHTML = '🗑';
@@ -240,12 +233,10 @@ function handleIncomingMessage(data, fromPeer){
     renderRooms();
   }
   saveState();
-
-  // flood to peers except source
   for(const pid in connections){
     if(pid === fromPeer) continue;
     const c = connections[pid];
-    if(c && c.open) { try{ c.send(data); }catch(e){} }
+    if(c && c.open) try{ c.send(data); }catch(e){}
   }
 }
 
@@ -278,8 +269,6 @@ function sendMessage(text){
 function setupConnection(conn){
   const peerId = conn.peer;
   connections[peerId] = conn;
-
-  // ensure room exists for this pair
   const rk = roomKey(username, peerId);
   if(!rooms[rk]) rooms[rk] = [];
   if(!document.querySelector(`.room-btn[data-room="${rk}"]`)) addRoomButton(rk);
@@ -291,7 +280,6 @@ function setupConnection(conn){
   });
 
   conn.on('open', () => {
-    // send last global to requester (help late joiners)
     const toSend = (rooms['Global']||[]).slice(-20);
     for(const m of toSend){
       try{ conn.send({type:'msg', id: m.id || makeId(), from: m.who, text: m.msg, room:'Global', time: m.time || Date.now()}); }catch(e){}
@@ -339,167 +327,90 @@ function deleteChat(roomKey){
   renderChat();
 }
 
-function showTyping(who){
-  typingEl.innerText = who + ' is typing...';
-  clearTimeout(window._tTO);
-  window._tTO = setTimeout(()=> typingEl.innerText = '', 1400);
-}
-
-/* ======= Add friend UI ======= */
-addFriendBtn.onclick = () => {
-  const friend = prompt('Enter username to chat with (exact):');
-  if(!friend || friend === username) return;
-  const rk = roomKey(username, friend);
-  if(!rooms[rk]) rooms[rk] = [];
-  unread[rk] = 0;
-  saveState();
-  if(!document.querySelector(`.room-btn[data-room="${rk}"]`)) addRoomButton(rk);
-  if(!connections[friend]){
-    try{
-      const conn = peer.connect(friend, { reliable: true });
-      conn.on('open', ()=> setupConnection(conn));
-      conn.on('error', ()=> console.warn('conn error'));
-    }catch(e){ console.warn(e); }
-  }
-};
-
-/* ======= Typing -> send indicator ======= */
-msgInput.addEventListener('input', () => {
-  if(currentRoom === 'Global') return;
-  const parts = currentRoom.split('_');
-  const friend = parts[0] === username ? parts[1] : parts[0];
-  const conn = connections[friend];
-  if(conn && conn.open){
-    try{ conn.send({type:'typing', from: username, room: currentRoom}); }catch(e){}
-  }
-});
-
-/* ======= Send button ======= */
-sendBtn.onclick = () => {
-  const txt = msgInput.value.trim();
-  if(!txt) return;
-  sendMessage(txt);
-  msgInput.value = '';
-};
-
-/* ======= Theme toggle ======= */
-themeToggle.onclick = () => {
-  const cur = document.body.getAttribute('data-theme') || 'light';
-  document.body.setAttribute('data-theme', cur === 'light' ? 'dark' : 'light');
-};
-
-/* ======= Settings modal logic (FIXED password handling & username migration) ======= */
-settingsBtn.onclick = ()=> { settingsModal.style.display = 'flex'; newUsernameInput.value=''; newPasswordInput.value=''; };
-closeSettingsBtn.onclick = ()=> settingsModal.style.display = 'none';
-
+/* Settings */
+settingsBtn.onclick = ()=>settingsModal.style.display='flex';
+closeSettingsBtn.onclick = ()=>settingsModal.style.display='none';
 saveSettingsBtn.onclick = ()=>{
-  const newU = newUsernameInput.value.trim();
-  const newP = newPasswordInput.value; // plaintext entry
-
-  let users = JSON.parse(localStorage.getItem('users') || '{}');
-
-  // Ensure current user exists in users (create if not)
-  if(!users[username]){ users[username] = { password: hash('') }; } // if legacy missing, set empty hash
-
-  // Change username flow
-  if(newU && newU !== username){
-    if(users[newU]) { alert('Username already taken. Choose another.'); return; }
-
-    // compute new password hash: prefer newP if given, otherwise carry old hashed password
-    const oldHashed = users[username] ? users[username].password : null;
-    const newHashed = newP ? hash(newP) : oldHashed;
-
-    // set new user record and remove old
-    users[newU] = { password: newHashed };
-    delete users[username];
-    localStorage.setItem('users', JSON.stringify(users));
-
-    // migrate rooms/unread/seen keys to new username keys
-    const oldRoomsKey = username + '_rooms';
-    const newRoomsKey = newU + '_rooms';
-    const oldUnreadKey = username + '_unread';
-    const newUnreadKey = newU + '_unread';
-    const oldSeenKey = username + '_seen';
-    const newSeenKey = newU + '_seen';
-
-    // Save current in-memory rooms under new key
-    localStorage.setItem(newRoomsKey, JSON.stringify(rooms || {"Global":[]}));
-    localStorage.removeItem(oldRoomsKey);
-
-    // unread
-    localStorage.setItem(newUnreadKey, JSON.stringify(unread || {}));
-    localStorage.removeItem(oldUnreadKey);
-
-    // seen
-    localStorage.setItem(newSeenKey, JSON.stringify(Array.from(seen)));
-    localStorage.removeItem(oldSeenKey);
-
-    alert('Username changed. You will be redirected to login with the new username.');
-    sessionStorage.setItem('username', newU);
-    // force logout so PeerJS will re-init with new id on next load
-    sessionStorage.clear();
-    window.location.href = 'login.html';
-    return;
+  const val = newUsernameInput.value.trim();
+  if(!val){ alert('Enter a username'); return; }
+  const old = username;
+  sessionStorage.setItem('username', val);
+  // rename all private rooms
+  const newRooms = {};
+  for(const rk in rooms){
+    if(rk==='Global'){ newRooms['Global'] = rooms[rk]; continue; }
+    const parts = rk.split('_');
+    const user1 = parts[0]===old?val:parts[0];
+    const user2 = parts[1]===old?val:parts[1];
+    newRooms[roomKey(user1,user2)] = rooms[rk];
   }
-
-  // Change password only
-  if(newP){
-    users[username] = users[username] || {};
-    users[username].password = hash(newP);
-    localStorage.setItem('users', JSON.stringify(users));
-    alert('Password updated successfully.');
-    newPasswordInput.value = '';
-    return;
-  }
-
-  alert('No changes made.');
+  rooms = newRooms;
+  renderRooms(); renderChat();
+  alert('Username updated. Refreshing to apply...');
+  location.reload();
 };
-
 clearChatsBtn.onclick = ()=>{
-  if(!confirm('Clear all your chats? This removes local chat history only.')) return;
-  rooms = {"Global": []};
-  unread = {};
-  saveState();
-  renderChat();
+  if(confirm('Clear all your chats?')){ rooms={'Global':[]}; unread={}; seen=new Set(); saveState(); renderChat(); }
+};
+logoutBtn.onclick = ()=>{ sessionStorage.removeItem('username'); location.href='login.html'; };
+
+/* Theme toggle */
+themeToggle.onclick = ()=>{
+  const t = document.body.getAttribute('data-theme');
+  document.body.setAttribute('data-theme', t==='light'?'dark':'light');
 };
 
-logoutBtn.onclick = ()=>{
-  sessionStorage.clear();
-  window.location.href = 'login.html';
+/* New private chat */
+addFriendBtn.onclick = ()=>{
+  const u = prompt('Enter username to chat with:'); 
+  if(!u || u.trim()===username) return;
+  const rk = roomKey(username,u.trim());
+  if(!rooms[rk]) rooms[rk] = [];
+  renderRooms(); switchRoom(rk);
+  connectToPeer(u.trim());
 };
 
-/* ======= Boot: load persisted and start PeerJS ======= */
-function loadInitial(){
-  if(!rooms['Global'] || rooms['Global'].length === 0){
-    rooms['Global'] = JSON.parse(localStorage.getItem(GLOBAL_KEY) || '[]');
+/* Send message */
+sendBtn.onclick = ()=>{ const v=msgInput.value.trim(); if(!v)return; sendMessage(v); msgInput.value=''; };
+msgInput.addEventListener('keydown',e=>{ if(e.key==='Enter') sendBtn.click(); });
+
+/* Typing indicator */
+let typingTimeout=null;
+msgInput.addEventListener('input',()=>{
+  for(const pid in connections){
+    const c = connections[pid];
+    if(c && c.open) try{ c.send({type:'typing', from:username, room:currentRoom}); }catch(e){}
   }
-  for(const rk of Object.keys(rooms)) if(!unread[rk]) unread[rk] = 0;
-  renderRooms();
-  renderChat();
-}
-loadInitial();
-
-peer = new Peer(username);
-peer.on('open', id => {
-  // auto connect known private rooms
-  Object.keys(rooms).forEach(rk => {
-    if(rk === 'Global') return;
-    const friend = otherNameFromRoomKey(rk);
-    if(friend && friend !== username && !connections[friend]){
-      try{
-        const conn = peer.connect(friend, { reliable: true });
-        conn.on('open', ()=> setupConnection(conn));
-      }catch(e){}
-    }
-  });
-  renderRooms();
 });
-peer.on('connection', conn => { conn.on('open', ()=> setupConnection(conn)); });
 
-peer.on('open', ()=> { msgInput.disabled = false; sendBtn.disabled = false; });
+function showTyping(who){
+  typingEl.innerText = who+' is typing…';
+  clearTimeout(typingTimeout);
+  typingTimeout=setTimeout(()=>typingEl.innerText='',1000);
+}
 
-window.addEventListener('beforeunload', ()=> saveState());
+/* ======= PeerJS setup ======= */
+peer = new Peer(username, {host:'', port:9000, path:'/'});
+peer.on('connection', setupConnection);
+peer.on('open', id=>{
+  msgInput.disabled=false;
+  sendBtn.disabled=false;
+  // load Global chat from localStorage
+  const oldGlobal = JSON.parse(localStorage.getItem(GLOBAL_KEY)||'[]');
+  rooms['Global'] = oldGlobal;
+  renderRooms(); renderChat();
+});
 
+/* For mobile view scroll fix */
+chatEl.addEventListener('touchmove', e=>{ e.stopPropagation(); });
+
+/* Connect to peer helper */
+function connectToPeer(id){
+  if(id===username) return;
+  if(connections[id] && connections[id].open) return;
+  const c = peer.connect(id);
+  setupConnection(c);
+}
 </script>
 </body>
 </html>
