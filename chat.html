@@ -2,29 +2,14 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Chat App</title>
+<title>Hybrid Chat</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <style>
 body{margin:0;font-family:Arial,sans-serif;background:#f0f2f5;display:flex;height:100vh;overflow:hidden;}
-#sidebar{width:200px;background:#4a90e2;color:white;display:flex;flex-direction:column;}
+#sidebar{width:180px;background:#4a90e2;color:white;display:flex;flex-direction:column;overflow-y:auto;}
 #sidebar h3{text-align:center;margin:10px 0;}
-.room-btn{padding:10px;border:none;background:#357ABD;color:white;margin:5px;cursor:pointer;border-radius:6px;}
-.room-btn.active{background:#285680;}
-#main{flex:1;display:flex;flex-direction:column;}
-header{background:#357ABD;color:white;padding:10px;text-align:center;font-weight:bold;}
-#chat{flex:1;overflow-y:auto;padding:10px;background:#fafafa;}
-#chat div{margin-bottom:6px;}
-.peer-label{font-weight:bold;}
-footer{display:flex;padding:6px;background:white;}
-input[type=text]{flex:1;padding:8px;border-radius:6px;border:1px solid #ccc;}
-button{padding:8px 12px;border-radius:6px;border:none;background:#4a90e2;color:white;font-weight:bold;cursor:pointer;}
-button:disabled{opacity:0.5;cursor:not-allowed;}
-  <style>
-body{margin:0;font-family:Arial,sans-serif;background:#f0f2f5;display:flex;height:100vh;overflow:hidden;}
-#sidebar{width:180px;background:#4a90e2;color:white;display:flex;flex-direction:column;}
-#sidebar h3{text-align:center;margin:10px 0;}
-.room-btn{padding:10px;border:none;background:#357ABD;color:white;margin:5px;cursor:pointer;border-radius:6px;font-size:14px;}
+.room-btn{padding:10px;border:none;background:#357ABD;color:white;margin:3px;cursor:pointer;border-radius:6px;font-size:14px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .room-btn.active{background:#285680;}
 #main{flex:1;display:flex;flex-direction:column;}
 header{background:#357ABD;color:white;padding:10px;text-align:center;font-weight:bold;font-size:16px;}
@@ -42,16 +27,13 @@ button:disabled{opacity:0.5;cursor:not-allowed;}
   button,input{font-size:13px;}
 }
 </style>
-
-</style>
 </head>
 <body>
 
 <div id="sidebar">
-<h3>Rooms</h3>
-<button class="room-btn active" data-room="General">General</button>
-<button class="room-btn" data-room="Random">Random</button>
-<button class="room-btn" data-room="Tech">Tech</button>
+<h3>Chats</h3>
+<!-- Global room always -->
+<button class="room-btn active" data-room="Global">Global</button>
 </div>
 
 <div id="main">
@@ -65,40 +47,66 @@ button:disabled{opacity:0.5;cursor:not-allowed;}
 
 <script>
 const username=sessionStorage.getItem('username')||'User'+Math.floor(Math.random()*1000);
-let currentRoom='General';
+let currentRoom='Global';
 document.getElementById('header').innerText=username+' | Room: '+currentRoom;
 
 const chatBox=document.getElementById('chat');
 const msgInput=document.getElementById('msgInput');
 const sendBtn=document.getElementById('sendBtn');
-const roomButtons=document.querySelectorAll('.room-btn');
+const sidebar=document.getElementById('sidebar');
 
-let peer=new Peer(username); // use username as peer ID
+let peer=new Peer(username); // username as ID
 let connections={}; // {username: conn}
 
+// Rooms data: roomName => message array
+let rooms={'Global':[]};
+
+// Append message
 function appendMessage(msg,who='Peer'){
-  chatBox.innerHTML+=`<div><span class="peer-label">${who}:</span> ${msg}</div>`;
+  rooms[currentRoom].push({who,msg});
+  chatBox.innerHTML='';
+  rooms[currentRoom].forEach(m=>{
+    chatBox.innerHTML+=`<div><span class="peer-label">${m.who}:</span> ${m.msg}</div>`;
+  });
   chatBox.scrollTop=chatBox.scrollHeight;
 }
 
-// Connect to another user by username
-function connectToUser(target){
-  if(connections[target] && connections[target].open) return;
-  const conn=peer.connect(target);
-  setupConnection(conn);
+// Broadcast to all connected peers (Global room)
+function broadcast(msg){
+  for(let user in connections){
+    if(connections[user].open)
+      connections[user].send({from:username,text:msg,room:'Global'});
+  }
 }
 
-// Setup incoming or outgoing connection
+// Send private message to specific user
+function sendPrivate(target,msg){
+  if(connections[target] && connections[target].open)
+    connections[target].send({from:username,text:msg,room:target});
+}
+
+// Setup connection (incoming or outgoing)
 function setupConnection(conn){
   connections[conn.peer]=conn;
+  // Add private chat button if not exist
+  if(conn.peer!==username && !document.querySelector(`.room-btn[data-room="${conn.peer}"]`)){
+    const btn=document.createElement('button');
+    btn.className='room-btn';
+    btn.dataset.room=conn.peer;
+    btn.innerText=conn.peer;
+    btn.onclick=()=>switchRoom(conn.peer);
+    sidebar.appendChild(btn);
+    rooms[conn.peer]=[];
+  }
   conn.on('open',()=>{
     appendMessage('Connected to '+conn.peer,'System');
     msgInput.disabled=false;
     sendBtn.disabled=false;
   });
   conn.on('data',data=>{
-    if(data.room===currentRoom)
-      appendMessage(data.text,data.from);
+    if(!rooms[data.room]) rooms[data.room]=[];
+    rooms[data.room].push({who:data.from,msg:data.text});
+    if(currentRoom===data.room) appendMessage(data.text,data.from);
   });
   conn.on('close',()=>{
     appendMessage('Disconnected from '+conn.peer,'System');
@@ -106,49 +114,48 @@ function setupConnection(conn){
   });
 }
 
-// Broadcast message to all connected peers
-function broadcast(msg){
-  for(let user in connections){
-    if(connections[user].open)
-      connections[user].send({from:username,text:msg,room:currentRoom});
-  }
-}
-
-// Send button
-sendBtn.onclick=()=>{
-  const msg=msgInput.value.trim();
-  if(!msg) return;
-  appendMessage(msg,'You');
-  broadcast(msg);
-  msgInput.value='';
-}
-
 // PeerJS events
 peer.on('open',id=>{
   appendMessage('Connected as '+id,'System');
+  msgInput.disabled=false;
+  sendBtn.disabled=false;
+
+  // Auto-connect to known users (from localStorage)
+  let knownUsers=JSON.parse(localStorage.getItem('users')||'{}');
+  for(let u in knownUsers){
+    if(u!==username){
+      const conn=peer.connect(u);
+      setupConnection(conn);
+    }
+  }
 });
 
 peer.on('connection',conn=>{
   setupConnection(conn);
 });
 
-// Room switching
-roomButtons.forEach(btn=>{
-  btn.onclick=()=>{
-    roomButtons.forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    currentRoom=btn.dataset.room;
-    document.getElementById('header').innerText=username+' | Room: '+currentRoom;
-    chatBox.innerHTML='';
-  }
-});
+// Send button
+sendBtn.onclick=()=>{
+  const msg=msgInput.value.trim();
+  if(!msg) return;
+  appendMessage(msg,'You');
+  if(currentRoom==='Global') broadcast(msg);
+  else sendPrivate(currentRoom,msg);
+  msgInput.value='';
+}
 
-// Example: auto connect to some known usernames (demo)
-let knownUsers=JSON.parse(localStorage.getItem('users')||'{}');
-for(let u in knownUsers){
-  if(u!==username){
-    connectToUser(u);
-  }
+// Switch rooms
+function switchRoom(room){
+  document.querySelectorAll('.room-btn').forEach(b=>b.classList.remove('active'));
+  const btn=document.querySelector(`.room-btn[data-room="${room}"]`);
+  if(btn) btn.classList.add('active');
+  currentRoom=room;
+  document.getElementById('header').innerText=username+' | Room: '+currentRoom;
+  chatBox.innerHTML='';
+  if(!rooms[room]) rooms[room]=[];
+  rooms[room].forEach(m=>{
+    chatBox.innerHTML+=`<div><span class="peer-label">${m.who}:</span> ${m.msg}</div>`;
+  });
 }
 </script>
 </body>
