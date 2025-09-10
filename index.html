@@ -1,41 +1,80 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Local Chat</title>
+  <title>WebRTC Chat (No Backend)</title>
   <style>
     body { font-family: Arial; }
+    textarea { width: 100%; height: 100px; }
     #chat { border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: auto; }
-    input { width: 70%; }
   </style>
 </head>
 <body>
-  <h2>Local Chat (no backend)</h2>
+  <h2>Peer-to-Peer Chat (WebRTC, no backend)</h2>
+  
+  <div>
+    <button id="createOffer">Create Offer</button>
+    <textarea id="offer"></textarea>
+  </div>
+  
+  <div>
+    <button id="createAnswer">Create Answer</button>
+    <textarea id="answer"></textarea>
+  </div>
+  
+  <div>
+    <button id="setOffer">Set Offer</button>
+    <button id="setAnswer">Set Answer</button>
+  </div>
+
   <div id="chat"></div>
   <input id="msg" placeholder="Type a message">
-  <button onclick="send()">Send</button>
+  <button id="sendBtn">Send</button>
 
   <script>
-    const chatBox = document.getElementById("chat");
+    let pc = new RTCPeerConnection();
+    let channel = pc.createDataChannel("chat");
+    let chatBox = document.getElementById("chat");
 
-    function render() {
-      chatBox.innerHTML = "";
-      let messages = JSON.parse(localStorage.getItem("messages") || "[]");
-      messages.forEach(m => {
-        chatBox.innerHTML += "<p>" + m + "</p>";
-      });
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
+    channel.onmessage = e => {
+      chatBox.innerHTML += "<p><b>Peer:</b> " + e.data + "</p>";
+    };
 
-    function send() {
-      let input = document.getElementById("msg");
-      let messages = JSON.parse(localStorage.getItem("messages") || "[]");
-      messages.push(input.value);
-      localStorage.setItem("messages", JSON.stringify(messages));
-      input.value = "";
-      render();
-    }
+    document.getElementById("sendBtn").onclick = () => {
+      let msg = document.getElementById("msg").value;
+      channel.send(msg);
+      chatBox.innerHTML += "<p><b>You:</b> " + msg + "</p>";
+      document.getElementById("msg").value = "";
+    };
 
-    render();
+    // Create Offer
+    document.getElementById("createOffer").onclick = async () => {
+      let offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      document.getElementById("offer").value = JSON.stringify(offer);
+    };
+
+    // Set Offer from Peer
+    document.getElementById("setOffer").onclick = async () => {
+      let offer = JSON.parse(document.getElementById("offer").value);
+      await pc.setRemoteDescription(offer);
+      let answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      document.getElementById("answer").value = JSON.stringify(answer);
+    };
+
+    // Set Answer from Peer
+    document.getElementById("setAnswer").onclick = async () => {
+      let answer = JSON.parse(document.getElementById("answer").value);
+      await pc.setRemoteDescription(answer);
+    };
+
+    // When answer side creates channel
+    pc.ondatachannel = e => {
+      e.channel.onmessage = ev => {
+        chatBox.innerHTML += "<p><b>Peer:</b> " + ev.data + "</p>";
+      };
+      channel = e.channel;
+    };
   </script>
 </body>
 </html>
