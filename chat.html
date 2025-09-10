@@ -1,259 +1,278 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <title>Hybrid Chat</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <style>
-html,body {
-  margin:0;
-  padding:0;
-  font-family:Arial,sans-serif;
-  background:#f0f2f5;
-  width:100vw;
-  height:100vh;
-  overflow:hidden;
-  display:flex;
+:root {
+  --bg: #f0f2f5;
+  --sidebar-bg: #357ABD;
+  --sidebar-active: #285680;
+  --text: #000;
+  --header-bg: #4a90e2;
+  --msg-bg: #fff;
+  --bubble-self: #daf1da;
+  --bubble-other: #f1f0f0;
+}
+[data-theme="dark"] {
+  --bg: #181a1b;
+  --sidebar-bg: #222;
+  --sidebar-active: #444;
+  --text: #fff;
+  --header-bg: #333;
+  --msg-bg: #202124;
+  --bubble-self: #2e7d32;
+  --bubble-other: #555;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+#app {
+  display: flex;
+  width: 95%;
+  max-width: 900px;
+  height: 85vh;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
 }
 
 /* Sidebar */
 #sidebar {
-  width:150px;
-  background:#4a90e2;
-  color:white;
-  display:flex;
-  flex-direction:column;
-  overflow-y:auto;
-  padding-bottom:10px;
-  flex-shrink:0;
+  width: 180px;
+  background: var(--sidebar-bg);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  box-sizing: border-box;
 }
 #sidebar h3 {
-  text-align:center;
-  margin:10px 0;
+  margin: 0 0 10px;
+  text-align: center;
+  font-size: 16px;
 }
 .room-btn {
-  padding:8px;
-  border:none;
-  background:#357ABD;
-  color:white;
-  margin:3px;
-  cursor:pointer;
-  border-radius:6px;
-  font-size:12px;
-  text-align:left;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: white;
+  margin: 3px 0;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 14px;
+  text-align: left;
 }
-.room-btn.active { background:#285680; }
+.room-btn.active { background: var(--sidebar-active); }
+#addFriend {
+  margin-top: auto;
+  background: #4a90e2;
+  color: white;
+  border: none;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
 
-/* Main area */
+/* Main */
 #main {
-  flex:1;
-  display:flex;
-  flex-direction:column;
-  height:100vh;
-  width: calc(100vw - 150px);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--msg-bg);
 }
-
-/* Header */
 header {
-  background:#357ABD;
-  color:white;
-  padding:10px;
-  text-align:center;
-  font-weight:bold;
-  font-size:14px;
-  flex-shrink:0;
+  background: var(--header-bg);
+  color: white;
+  padding: 10px;
+  font-weight: bold;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
-
-/* Chat box */
+#themeToggle {
+  background: none;
+  border: 1px solid white;
+  color: white;
+  border-radius: 6px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
 #chat {
-  flex:1;
-  overflow-y:auto;
-  padding:6px;
-  background:#fafafa;
-  font-size:12px;
-  word-wrap: break-word; /* prevent horizontal overflow */
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  font-size: 14px;
 }
-
-/* Messages */
-#chat div { margin-bottom:3px; }
-.peer-label { font-weight:bold; }
-
-/* Footer */
+.msg {
+  margin: 6px 0;
+  max-width: 70%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  clear: both;
+}
+.msg.self {
+  background: var(--bubble-self);
+  float: right;
+}
+.msg.other {
+  background: var(--bubble-other);
+  float: left;
+}
 footer {
-  display:flex;
-  padding:4px;
-  background:white;
-  flex-shrink:0;
-  box-sizing:border-box;
+  display: flex;
+  padding: 8px;
+  background: var(--bg);
+  border-top: 1px solid #ccc;
 }
 input[type=text] {
-  flex:1;
-  padding:6px;
-  border-radius:6px;
-  border:1px solid #ccc;
-  font-size:12px;
+  flex: 1;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 14px;
 }
 button {
-  padding:6px 8px;
-  border-radius:6px;
-  border:none;
-  background:#4a90e2;
-  color:white;
-  font-weight:bold;
-  cursor:pointer;
-  font-size:12px;
-  white-space:nowrap;
-}
-button:disabled { opacity:0.5; cursor:not-allowed; }
-
-/* Responsive */
-@media(max-width:500px){
-  #sidebar { width:120px; font-size:11px; }
-  #main { width: calc(100vw - 120px); }
-  header { font-size:12px; }
-  #chat { font-size:11px; padding:4px; }
-  button,input { font-size:11px; padding:4px; }
+  margin-left: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  background: #4a90e2;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
 }
 </style>
 </head>
-<body>
+<body data-theme="light">
 
-<div id="sidebar">
-<h3>Chats</h3>
-<button class="room-btn active" data-room="Global">Global</button>
-</div>
+<div id="app">
+  <div id="sidebar">
+    <h3>Chats</h3>
+    <button class="room-btn active" data-room="Global">🌍 Global</button>
+    <button id="addFriend">+ New Chat</button>
+  </div>
 
-<div id="main">
-<header id="header"></header>
-<div id="chat"></div>
-<footer>
-<input type="text" id="msgInput" placeholder="Message" disabled>
-<button id="sendBtn" disabled>Send</button>
-</footer>
+  <div id="main">
+    <header>
+      <span id="headerTitle"></span>
+      <button id="themeToggle">🌙</button>
+    </header>
+    <div id="chat"></div>
+    <footer>
+      <input type="text" id="msgInput" placeholder="Message" disabled>
+      <button id="sendBtn" disabled>Send</button>
+    </footer>
+  </div>
 </div>
 
 <script>
 // --- Redirect if not logged in ---
-const username=sessionStorage.getItem('username');
-if(!username) window.location.href='login.html';
+const username = sessionStorage.getItem('username');
+if (!username) window.location.href='login.html';
 
-// --- Initialize ---
-let currentRoom='Global';
-document.getElementById('header').innerText=username+' | Room: '+currentRoom;
-
-const chatBox=document.getElementById('chat');
-const msgInput=document.getElementById('msgInput');
-const sendBtn=document.getElementById('sendBtn');
-const sidebar=document.getElementById('sidebar');
-
-let peer=new Peer(username);
-let connections={}; // peerId => conn
-let rooms={'Global':[]};
-
-// Load last 20 global messages from localStorage
-rooms['Global']=JSON.parse(localStorage.getItem('globalMessages')||'[]');
-function saveGlobalMessages(){ localStorage.setItem('globalMessages', JSON.stringify(rooms['Global'].slice(-20))); }
+let currentRoom = 'Global';
+let rooms = {'Global': JSON.parse(localStorage.getItem('globalMessages')||'[]')};
+let peer = new Peer(username);
+let connections = {};
+const chatBox = document.getElementById('chat');
+const msgInput = document.getElementById('msgInput');
+const sendBtn = document.getElementById('sendBtn');
+const headerTitle = document.getElementById('headerTitle');
+headerTitle.innerText = username + ' | ' + currentRoom;
 
 // --- Functions ---
-function appendMessage(msg,who='Peer'){
-  if(!rooms[currentRoom]) rooms[currentRoom]=[];
-  rooms[currentRoom].push({who,msg});
-  if(currentRoom==='Global') saveGlobalMessages();
+function renderChat(){
   chatBox.innerHTML='';
   rooms[currentRoom].forEach(m=>{
-    chatBox.innerHTML+=`<div><span class="peer-label">${m.who}:</span> ${m.msg}</div>`;
+    let div=document.createElement('div');
+    div.className='msg ' + (m.who===username?'self':'other');
+    div.innerText=m.who+': '+m.msg;
+    chatBox.appendChild(div);
   });
   chatBox.scrollTop=chatBox.scrollHeight;
 }
-
+function appendMessage(msg,who){
+  rooms[currentRoom].push({who,msg});
+  if(currentRoom==='Global') 
+    localStorage.setItem('globalMessages', JSON.stringify(rooms['Global'].slice(-20)));
+  renderChat();
+}
 function broadcast(msg){
-  for(let user in connections){
-    if(connections[user].open) connections[user].send({from:username,text:msg,room:'Global'});
+  for(let u in connections){
+    if(connections[u].open) connections[u].send({from:username,text:msg,room:currentRoom});
   }
 }
-
-function sendPrivate(target,msg){
-  if(connections[target] && connections[target].open)
-    connections[target].send({from:username,text:msg,room:target});
-}
-
 function setupConnection(conn){
   connections[conn.peer]=conn;
-
-  // Add private chat if new
-  if(conn.peer!==username && !document.querySelector(`.room-btn[data-room="${conn.peer}"]`)){
-    const btn=document.createElement('button');
-    btn.className='room-btn';
-    btn.dataset.room=conn.peer;
-    btn.innerText=conn.peer;
-    btn.onclick=()=>switchRoom(conn.peer);
-    sidebar.appendChild(btn);
+  if(!rooms[conn.peer]){
     rooms[conn.peer]=[];
+    addRoomButton(conn.peer);
   }
-
-  conn.on('open',()=>{
-    appendMessage('Connected to '+conn.peer,'System');
-    msgInput.disabled=false;
-    sendBtn.disabled=false;
-  });
-
   conn.on('data',data=>{
     if(!rooms[data.room]) rooms[data.room]=[];
     rooms[data.room].push({who:data.from,msg:data.text});
-    if(currentRoom===data.room) appendMessage(data.text,data.from);
-  });
-
-  conn.on('close',()=>{
-    appendMessage('Disconnected from '+conn.peer,'System');
-    delete connections[conn.peer];
+    if(currentRoom===data.room) renderChat();
   });
 }
-
+function addRoomButton(room){
+  const btn=document.createElement('button');
+  btn.className='room-btn';
+  btn.dataset.room=room;
+  btn.innerText='💬 '+room;
+  btn.onclick=()=>switchRoom(room);
+  document.getElementById('sidebar').insertBefore(btn, document.getElementById('addFriend'));
+}
 function switchRoom(room){
   document.querySelectorAll('.room-btn').forEach(b=>b.classList.remove('active'));
   const btn=document.querySelector(`.room-btn[data-room="${room}"]`);
   if(btn) btn.classList.add('active');
   currentRoom=room;
-  document.getElementById('header').innerText=username+' | Room: '+currentRoom;
-  chatBox.innerHTML='';
+  headerTitle.innerText=username+' | '+room;
   if(!rooms[room]) rooms[room]=[];
-  rooms[room].forEach(m=>{
-    chatBox.innerHTML+=`<div><span class="peer-label">${m.who}:</span> ${m.msg}</div>`;
-  });
+  renderChat();
 }
 
 // --- PeerJS ---
-peer.on('open',id=>{
-  appendMessage('Connected as '+id,'System');
-  msgInput.disabled=false;
-  sendBtn.disabled=false;
+peer.on('open',()=>{ msgInput.disabled=false; sendBtn.disabled=false; renderChat(); });
+peer.on('connection',conn=>setupConnection(conn));
 
-  // Auto-connect to all users in localStorage
-  let users=JSON.parse(localStorage.getItem('users')||'{}');
-  for(let u in users){
-    if(u!==username){
-      const conn=peer.connect(u);
-      setupConnection(conn);
-    }
-  }
-});
-
-peer.on('connection',conn=>{ setupConnection(conn); });
-
-// --- Sending ---
+// --- Send ---
 sendBtn.onclick=()=>{
   const msg=msgInput.value.trim();
   if(!msg) return;
-  appendMessage(msg,'You');
+  appendMessage(msg,username);
   if(currentRoom==='Global') broadcast(msg);
-  else sendPrivate(currentRoom,msg);
+  else if(connections[currentRoom]) connections[currentRoom].send({from:username,text:msg,room:currentRoom});
   msgInput.value='';
 };
 
+// --- Add friend ---
+document.getElementById('addFriend').onclick=()=>{
+  const friend=prompt('Enter username to chat with:');
+  if(friend && friend!==username && !connections[friend]){
+    const conn=peer.connect(friend);
+    setupConnection(conn);
+    addRoomButton(friend);
+  }
+};
+
+// --- Theme toggle ---
+document.getElementById('themeToggle').onclick=()=>{
+  let theme=document.body.getAttribute('data-theme');
+  document.body.setAttribute('data-theme', theme==='light'?'dark':'light');
+};
 </script>
 </body>
 </html>
