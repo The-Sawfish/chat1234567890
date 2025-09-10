@@ -1,97 +1,94 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Peer Chat Room</title>
-  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; background: #f0f2f5; margin:0; padding:0; display:flex; flex-direction:column; height:100vh; }
-    header { background:#4a90e2; color:white; padding:15px; text-align:center; font-weight:bold; }
-    #chat { flex:1; overflow-y:auto; padding:10px; background:#fafafa; border-top:1px solid #ccc; border-bottom:1px solid #ccc; }
-    #chat div { margin-bottom:6px; }
-    .peer-label { font-weight:bold; }
-    footer { display:flex; padding:10px; gap:6px; background:white; }
-    input[type=text]{flex:1; padding:8px; border-radius:6px; border:1px solid #ccc;}
-    button{padding:8px 14px; border-radius:6px; border:none; background:#4a90e2; color:white; font-weight:bold; cursor:pointer;}
-    button:disabled{opacity:0.5; cursor:not-allowed;}
-  </style>
+<meta charset="utf-8">
+<title>Mobile Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+<style>
+body{margin:0;font-family:Arial,sans-serif;background:#f0f2f5;display:flex;flex-direction:column;height:100vh;}
+header{background:#4a90e2;color:white;padding:15px;text-align:center;font-weight:bold;}
+#chat{flex:1;overflow-y:auto;padding:10px;background:#fafafa;border-top:1px solid #ccc;border-bottom:1px solid #ccc;}
+#chat div{margin-bottom:6px;}
+.peer-label{font-weight:bold;}
+footer{display:flex;padding:10px;gap:6px;background:white;}
+input[type=text]{flex:1;padding:8px;border-radius:6px;border:1px solid #ccc;}
+button{padding:8px 14px;border-radius:6px;border:none;background:#4a90e2;color:white;font-weight:bold;cursor:pointer;}
+button:disabled{opacity:0.5;cursor:not-allowed;}
+</style>
 </head>
 <body>
-  <header id="header">Room: </header>
-  <div id="chat"></div>
-  <footer>
-    <input type="text" id="msgInput" placeholder="Type a message" disabled>
-    <button id="sendBtn" disabled>Send</button>
-  </footer>
+<header id="header"></header>
+<div id="chat"></div>
+<footer>
+<input type="text" id="msgInput" placeholder="Type a message" disabled>
+<button id="sendBtn" disabled>Send</button>
+</footer>
 
-  <script>
-    const username = sessionStorage.getItem('username') || 'User'+Math.floor(Math.random()*1000);
-    const room = sessionStorage.getItem('room') || 'defaultRoom';
-    document.getElementById('header').innerText = `Room: ${room} | You: ${username}`;
+<script>
+const username=sessionStorage.getItem('username')||'User'+Math.floor(Math.random()*1000);
+document.getElementById('header').innerText='Global Chat | '+username;
 
-    let peer = new Peer(); // Let PeerJS generate ID
-    let connections = {}; // key = peer ID, value = conn
-    const chatBox = document.getElementById('chat');
-    const msgInput = document.getElementById('msgInput');
-    const sendBtn = document.getElementById('sendBtn');
+let peer=new Peer(); // auto-generated ID
+let connections={};
+const chatBox=document.getElementById('chat');
+const msgInput=document.getElementById('msgInput');
+const sendBtn=document.getElementById('sendBtn');
 
-    function appendMessage(msg, who='Peer'){
-      chatBox.innerHTML += `<div><span class="peer-label">${who}:</span> ${msg}</div>`;
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
+function appendMessage(msg,who='Peer'){
+  chatBox.innerHTML+=`<div><span class="peer-label">${who}:</span> ${msg}</div>`;
+  chatBox.scrollTop=chatBox.scrollHeight;
+}
 
-    function broadcast(msg){
-      for(let pid in connections){
-        connections[pid].send({ from: username, text: msg });
-      }
-    }
+function broadcast(msg){
+  for(let pid in connections) connections[pid].send({from:username,text:msg});
+}
 
-    function setupConnection(conn){
-      connections[conn.peer] = conn;
-      conn.on('open', () => {
-        appendMessage('Connected to ' + conn.peer, 'System');
-        msgInput.disabled = false;
-        sendBtn.disabled = false;
-      });
-      conn.on('data', data => {
-        appendMessage(data.text, data.from);
-      });
-      conn.on('close', () => {
-        appendMessage('Disconnected from ' + conn.peer, 'System');
-        delete connections[conn.peer];
-      });
-    }
+function setupConnection(conn){
+  connections[conn.peer]=conn;
+  conn.on('open',()=>{
+    appendMessage('Connected to '+conn.peer,'System');
+    msgInput.disabled=false;
+    sendBtn.disabled=false;
+  });
+  conn.on('data',data=>{
+    appendMessage(data.text,data.from);
+  });
+  conn.on('close',()=>{
+    appendMessage('Disconnected from '+conn.peer,'System');
+    delete connections[conn.peer];
+  });
+}
 
-    peer.on('open', id => {
-      appendMessage('Connected to PeerJS server. Your ID: ' + id, 'System');
+peer.on('open',id=>{
+  appendMessage('Connected to PeerJS server. ID: '+id,'System');
 
-      // announce to room: store room peers in localStorage temporarily
-      let roomPeers = JSON.parse(localStorage.getItem('roomPeers-' + room) || '[]');
-      // connect to all existing peers in the room
-      roomPeers.forEach(pid => {
-        if(pid !== id){
-          const conn = peer.connect(pid);
-          setupConnection(conn);
-        }
-      });
-      // add self to room
-      if(!roomPeers.includes(id)){
-        roomPeers.push(id);
-        localStorage.setItem('roomPeers-' + room, JSON.stringify(roomPeers));
-      }
-    });
-
-    peer.on('connection', conn => {
+  // Try to connect to any existing peers (for demo using localStorage)
+  let existingPeers=JSON.parse(localStorage.getItem('globalPeers')||'[]');
+  existingPeers.forEach(pid=>{
+    if(pid!==id){
+      const conn=peer.connect(pid);
       setupConnection(conn);
-    });
+    }
+  });
+  // Add self to peer list
+  if(!existingPeers.includes(id)){
+    existingPeers.push(id);
+    localStorage.setItem('globalPeers',JSON.stringify(existingPeers));
+  }
+});
 
-    sendBtn.onclick = () => {
-      const msg = msgInput.value.trim();
-      if(!msg) return;
-      appendMessage(msg, 'You');
-      broadcast(msg);
-      msgInput.value = '';
-    };
-  </script>
+peer.on('connection',conn=>{
+  setupConnection(conn);
+});
+
+sendBtn.onclick=()=>{
+  const msg=msgInput.value.trim();
+  if(!msg) return;
+  appendMessage(msg,'You');
+  broadcast(msg);
+  msgInput.value='';
+}
+</script>
 </body>
 </html>
