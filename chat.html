@@ -73,16 +73,18 @@ html, body {
   border-radius: 6px;
   font-size: 14px;
   text-align: left;
+  position: relative;
 }
 .room-btn.active { background: var(--sidebar-active); }
-#addFriend {
-  margin-top: auto;
-  background: #4a90e2;
+.badge {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  background: red;
   color: white;
-  border: none;
-  padding: 6px;
-  border-radius: 6px;
-  cursor: pointer;
+  font-size: 11px;
+  border-radius: 50%;
+  padding: 2px 5px;
 }
 
 /* Main */
@@ -100,6 +102,12 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+#typing {
+  font-size: 12px;
+  font-style: italic;
+  color: #ddd;
+  margin-left: 10px;
 }
 #themeToggle {
   background: none;
@@ -167,6 +175,7 @@ button {
   <div id="main">
     <header>
       <span id="headerTitle"></span>
+      <span id="typing"></span>
       <button id="themeToggle">🌙</button>
     </header>
     <div id="chat"></div>
@@ -178,21 +187,29 @@ button {
 </div>
 
 <script>
-// --- Redirect if not logged in ---
 const username = sessionStorage.getItem('username');
 if (!username) window.location.href='login.html';
 
 let currentRoom = 'Global';
-let rooms = {'Global': JSON.parse(localStorage.getItem('globalMessages')||'[]')};
+let rooms = JSON.parse(localStorage.getItem(username+'_rooms') || '{"Global":[]}');
+let unread = JSON.parse(localStorage.getItem(username+'_unread') || '{}');
+
 let peer = new Peer(username);
 let connections = {};
 const chatBox = document.getElementById('chat');
 const msgInput = document.getElementById('msgInput');
 const sendBtn = document.getElementById('sendBtn');
 const headerTitle = document.getElementById('headerTitle');
+const typingEl = document.getElementById('typing');
 headerTitle.innerText = username + ' | ' + currentRoom;
 
-// --- Functions ---
+// --- Persist ---
+function saveState(){
+  localStorage.setItem(username+'_rooms', JSON.stringify(rooms));
+  localStorage.setItem(username+'_unread', JSON.stringify(unread));
+}
+
+// --- Render ---
 function renderChat(){
   chatBox.innerHTML='';
   rooms[currentRoom].forEach(m=>{
@@ -202,37 +219,43 @@ function renderChat(){
     chatBox.appendChild(div);
   });
   chatBox.scrollTop=chatBox.scrollHeight;
+  unread[currentRoom]=0;
+  updateBadges();
+  saveState();
 }
-function appendMessage(msg,who){
-  rooms[currentRoom].push({who,msg});
-  if(currentRoom==='Global') 
-    localStorage.setItem('globalMessages', JSON.stringify(rooms['Global'].slice(-20)));
-  renderChat();
-}
-function broadcast(msg){
-  for(let u in connections){
-    if(connections[u].open) connections[u].send({from:username,text:msg,room:currentRoom});
+function appendMessage(msg,who,room){
+  if(!rooms[room]) rooms[room]=[];
+  rooms[room].push({who,msg});
+  if(room===currentRoom) renderChat();
+  else {
+    unread[room]=(unread[room]||0)+1;
+    updateBadges();
   }
+  saveState();
 }
-function setupConnection(conn){
-  connections[conn.peer]=conn;
-  if(!rooms[conn.peer]){
-    rooms[conn.peer]=[];
-    addRoomButton(conn.peer);
-  }
-  conn.on('data',data=>{
-    if(!rooms[data.room]) rooms[data.room]=[];
-    rooms[data.room].push({who:data.from,msg:data.text});
-    if(currentRoom===data.room) renderChat();
+function updateBadges(){
+  document.querySelectorAll('.room-btn').forEach(btn=>{
+    let r=btn.dataset.room;
+    btn.querySelectorAll('.badge').forEach(b=>b.remove());
+    if(unread[r]>0){
+      let b=document.createElement('span');
+      b.className='badge';
+      b.innerText=unread[r];
+      btn.appendChild(b);
+    }
   });
 }
+
+// --- Sidebar ---
 function addRoomButton(room){
+  if(document.querySelector(`.room-btn[data-room="${room}"]`)) return;
   const btn=document.createElement('button');
   btn.className='room-btn';
   btn.dataset.room=room;
   btn.innerText='💬 '+room;
   btn.onclick=()=>switchRoom(room);
   document.getElementById('sidebar').insertBefore(btn, document.getElementById('addFriend'));
+  updateBadges();
 }
 function switchRoom(room){
   document.querySelectorAll('.room-btn').forEach(b=>b.classList.remove('active'));
@@ -245,26 +268,59 @@ function switchRoom(room){
 }
 
 // --- PeerJS ---
-peer.on('open',()=>{ msgInput.disabled=false; sendBtn.disabled=false; renderChat(); });
+peer.on('open',()=>{
+  msgInput.disabled=false; sendBtn.disabled=false; 
+  Object.keys(rooms).forEach(r=>{ if(r!=='Global') addRoomButton(r); });
+  renderChat();
+});
 peer.on('connection',conn=>setupConnection(conn));
+function setupConnection(conn){
+  connections[conn.peer]=conn;
+  if(!rooms[conn.peer]) { rooms[conn.peer]=[]; addRoomButton(conn.peer); }
+  conn.on('data',data=>{
+    if(data.type==='msg'){
+      appendMessage(data.text,data.from,data.room);
+    } else if(data.type==='typing'){
+      if(currentRoom===data.room) showTyping(data.from);
+    }
+  });
+}
 
-// --- Send ---
+// --- Messaging ---
 sendBtn.onclick=()=>{
   const msg=msgInput.value.trim();
   if(!msg) return;
-  appendMessage(msg,username);
-  if(currentRoom==='Global') broadcast(msg);
-  else if(connections[currentRoom]) connections[currentRoom].send({from:username,text:msg,room:currentRoom});
+  appendMessage(msg,username,currentRoom);
+  if(currentRoom==='Global'){
+    for(let u in connections) if(connections[u].open) connections[u].send({type:'msg',from:username,text:msg,room:'Global'});
+  } else if(connections[currentRoom]){
+    connections[currentRoom].send({type:'msg',from:username,text:msg,room:currentRoom});
+  }
   msgInput.value='';
 };
+
+// --- Typing indicator ---
+let typingTimeout;
+msgInput.addEventListener('input',()=>{
+  if(currentRoom!=='Global' && connections[currentRoom]){
+    connections[currentRoom].send({type:'typing',from:username,room:currentRoom});
+  }
+});
+function showTyping(who){
+  typingEl.innerText=who+' is typing...';
+  clearTimeout(typingTimeout);
+  typingTimeout=setTimeout(()=>typingEl.innerText='',1500);
+}
 
 // --- Add friend ---
 document.getElementById('addFriend').onclick=()=>{
   const friend=prompt('Enter username to chat with:');
-  if(friend && friend!==username && !connections[friend]){
+  if(friend && friend!==username){
     const conn=peer.connect(friend);
     setupConnection(conn);
     addRoomButton(friend);
+    if(!rooms[friend]) rooms[friend]=[];
+    saveState();
   }
 };
 
