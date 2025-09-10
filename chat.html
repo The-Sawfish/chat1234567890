@@ -95,9 +95,9 @@ if(!username) { window.location.href='login.html'; throw ''; }
 const ROOMS_KEY = username + '_rooms';
 const UNREAD_KEY = username + '_unread';
 const GLOBAL_KEY = 'globalMessages';
-const SEEN_KEY = username + '_seen'; // small persistent store of seen message ids (optional)
+const SEEN_KEY = username + '_seen';
 
-let rooms = JSON.parse(localStorage.getItem(ROOMS_KEY) || '{"Global":[]}'); // {roomKey: [{who,msg,id,time}]}
+let rooms = JSON.parse(localStorage.getItem(ROOMS_KEY) || '{"Global":[]}');
 let unread = JSON.parse(localStorage.getItem(UNREAD_KEY) || '{}');
 let seen = new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]'));
 
@@ -116,7 +116,19 @@ const themeToggle = document.getElementById('themeToggle');
 // state
 let currentRoom = 'Global';
 let peer = null;
-let connections = {}; // peerId => DataConnection
+let connections = {};
+
+/* ======= Notifications ======= */
+if ("Notification" in window && Notification.permission !== "granted") {
+  Notification.requestPermission();
+}
+
+function notify(title, body){
+  if(!("Notification" in window)) return;
+  if(Notification.permission === "granted"){
+    new Notification(title, { body, icon: 'https://i.imgur.com/7vQx9tR.png' });
+  }
+}
 
 /* ======= Utilities ======= */
 function saveState(){
@@ -134,9 +146,7 @@ function makeId(){ return Date.now().toString(36) + '-' + Math.random().toString
 
 /* ======= Rendering ======= */
 function renderRooms(){
-  // remove all except Global button
   roomsContainer.innerHTML = '';
-  // Global button (first)
   const globalBtn = document.createElement('button');
   globalBtn.className = 'room-btn' + (currentRoom === 'Global' ? ' active' : '');
   globalBtn.dataset.room = 'Global';
@@ -144,7 +154,6 @@ function renderRooms(){
   globalBtn.onclick = ()=>switchRoom('Global');
   roomsContainer.appendChild(globalBtn);
 
-  // other rooms (sorted: most recent message timestamp desc)
   const list = Object.keys(rooms).filter(r=>r!=='Global').sort((a,b)=>{
     const la = (rooms[a].length && rooms[a][rooms[a].length-1].time) || 0;
     const lb = (rooms[b].length && rooms[b][rooms[b].length-1].time) || 0;
@@ -158,7 +167,6 @@ function renderRooms(){
     const badgeHTML = (unread[rk] ? `<span class="badge">${unread[rk]}</span>` : '');
     btn.innerHTML = `<span class="room-label">💬 ${label}</span>${badgeHTML}`;
     btn.onclick = ()=>switchRoom(rk);
-    // delete icon (private only)
     const del = document.createElement('button');
     del.className = 'delete-btn';
     del.innerHTML = '🗑';
@@ -190,28 +198,32 @@ function appendMsgDOM(obj){
   d.appendChild(text); d.appendChild(meta); chatEl.appendChild(d);
 }
 
-/* ======= Messaging primitives (with flood + dedupe) ======= */
+/* ======= Messaging ======= */
 function handleIncomingMessage(data, fromPeer){
   if(!data || !data.id) return;
   if(seen.has(data.id)) return;
   seen.add(data.id);
 
-  // append to local store
   if(!rooms[data.room]) rooms[data.room] = [];
   rooms[data.room].push({who: data.from, msg: data.text, id: data.id, time: data.time});
-  // keep last 20 for global
   if(data.room === 'Global'){ rooms['Global'] = rooms['Global'].slice(-40); localStorage.setItem(GLOBAL_KEY, JSON.stringify(rooms['Global'].slice(-20))); }
-  // UI
+
   if(currentRoom === data.room){
     appendMsgDOM({who:data.from,msg:data.text,time:data.time});
     chatEl.scrollTop = chatEl.scrollHeight;
   } else {
-    unread[data.room] = (unread[data.room]||0) + 1;
+    unread[data.room] = (unread[data.room]||0)+1;
     renderRooms();
   }
   saveState();
 
-  // Flood: forward to other connected peers except the peer we got it from
+  // Notifications
+  if(currentRoom !== data.room || document.hidden){
+    const sender = data.from === username ? 'You' : data.from;
+    const roomLabel = data.room === 'Global' ? 'Global Chat' : `Private: ${otherNameFromRoomKey(data.room)}`;
+    notify(`${roomLabel}`, `${sender}: ${data.text}`);
+  }
+
   for(const pid in connections){
     if(pid === fromPeer) continue;
     const c = connections[pid];
@@ -223,8 +235,6 @@ function sendMessage(text){
   const id = makeId();
   const time = Date.now();
   const packet = { type:'msg', id, from: username, text, room: currentRoom, time };
-
-  // mark seen locally and store
   seen.add(id);
   if(!rooms[currentRoom]) rooms[currentRoom] = [];
   rooms[currentRoom].push({who: username, msg: text, id, time});
@@ -232,13 +242,11 @@ function sendMessage(text){
   renderChat();
 
   if(currentRoom === 'Global'){
-    // send to all connected peers
     for(const pid in connections){
       const c = connections[pid];
       if(c && c.open) try{ c.send(packet); }catch(e){}
     }
   } else {
-    // private: send to the friend (ensure connection exists)
     const parts = currentRoom.split('_');
     const friend = parts[0] === username ? parts[1] : parts[0];
     const c = connections[friend];
@@ -247,182 +255,105 @@ function sendMessage(text){
   saveState();
 }
 
-/* ======= Connections handling ======= */
+/* ======= PeerJS setup, UI, events ======= */
 function setupConnection(conn){
   const peerId = conn.peer;
   connections[peerId] = conn;
 
-  // ensure a roomKey exists (shared key)
   const rk = roomKey(username, peerId);
   if(!rooms[rk]) rooms[rk] = [];
   if(!document.querySelector(`.room-btn[data-room="${rk}"]`)) addRoomButton(rk);
 
-  conn.on('data', (data) => {
-    // expected packet shape: {type, id, from, text, room, time}
+  conn.on('data', data=>{
     if(!data || !data.type) return;
-    if(data.type === 'msg') handleIncomingMessage(data, peerId);
-    else if(data.type === 'typing') {
-      if(data.room === currentRoom) showTyping(data.from);
-    }
+    if(data.type==='msg') handleIncomingMessage(data, peerId);
+    else if(data.type==='typing') if(data.room===currentRoom) showTyping(data.from);
   });
 
-  conn.on('open', () => {
-    // optional: exchange current global cache — to help late joiners
-    // send last 20 global messages to newly connected peer so they can store/show them
+  conn.on('open', ()=>{
     const toSend = (rooms['Global']||[]).slice(-20);
     for(const m of toSend){
-      try{ conn.send({type:'msg', id: m.id || makeId(), from: m.who, text: m.msg, room:'Global', time: m.time || Date.now()}); } catch(e){}
+      try{ conn.send({type:'msg', id: m.id||makeId(), from:m.who, text:m.msg, room:'Global', time:m.time||Date.now()}); }catch(e){}
     }
     renderRooms();
   });
 
-  conn.on('close', () => { delete connections[peerId]; });
-  conn.on('error', ()=>{ delete connections[peerId]; });
-}
-
-/* ======= UI actions ======= */
-function addRoomButton(roomKey){
-  // create button with label = otherUser
-  const label = otherNameFromRoomKey(roomKey);
-  const btn = document.createElement('button');
-  btn.className = 'room-btn';
-  btn.dataset.room = roomKey;
-  const badgeHTML = (unread[roomKey] ? `<span class="badge">${unread[roomKey]}</span>` : '');
-  btn.innerHTML = `<span class="room-label">💬 ${label}</span>${badgeHTML}`;
-  btn.onclick = () => switchRoom(roomKey);
-
-  // delete icon for private
-  if(roomKey !== 'Global'){
-    const del = document.createElement('button');
-    del.className = 'delete-btn';
-    del.innerText = '🗑';
-    del.onclick = (e) => { e.stopPropagation(); deleteChat(roomKey); };
-    btn.appendChild(del);
-  }
-  roomsContainer.appendChild(btn);
-  renderRooms();
-}
-
-function switchRoom(roomKey){
-  currentRoom = roomKey;
-  renderChat();
-}
-
-function deleteChat(roomKey){
-  if(roomKey === 'Global') return;
-  if(!confirm('Delete conversation with ' + otherNameFromRoomKey(roomKey) + '?')) return;
-  delete rooms[roomKey];
-  delete unread[roomKey];
-  saveState();
-  // remove button
-  const b = document.querySelector(`.room-btn[data-room="${roomKey}"]`);
-  if(b) b.remove();
-  // if current, switch to Global
-  if(currentRoom === roomKey) currentRoom = 'Global';
-  renderChat();
+  conn.on('close', ()=>delete connections[peerId]);
+  conn.on('error', ()=>delete connections[peerId]);
 }
 
 function showTyping(who){
   typingEl.innerText = who + ' is typing...';
   clearTimeout(window._typingTO);
-  window._typingTO = setTimeout(()=> typingEl.innerText = '', 1400);
+  window._typingTO = setTimeout(()=> typingEl.innerText='', 1400);
 }
 
-/* ======= Add friend UI ======= */
-addFriendBtn.onclick = async () => {
+addFriendBtn.onclick = async ()=>{
   const friend = prompt('Enter username to chat with (exact):');
   if(!friend || friend === username) return;
   const rk = roomKey(username, friend);
   if(!rooms[rk]) rooms[rk] = [];
-  unread[rk] = 0;
+  unread[rk]=0;
   saveState();
   if(!document.querySelector(`.room-btn[data-room="${rk}"]`)) addRoomButton(rk);
-
-  // try to connect
   if(!connections[friend]){
-    try {
-      const conn = peer.connect(friend, { reliable: true });
-      conn.on('open', ()=> setupConnection(conn));
-      conn.on('error', ()=> console.warn('conn error'));
-    } catch(e){ console.warn('connect error', e); }
+    try{
+      const conn = peer.connect(friend, {reliable:true});
+      conn.on('open', ()=>setupConnection(conn));
+      conn.on('error', ()=>console.warn('conn error'));
+    }catch(e){ console.warn('connect error', e); }
   }
 };
 
-/* ======= Typing indicator send ======= */
 msgInput.addEventListener('input', ()=>{
-  if(currentRoom === 'Global') return; // skip global typing
+  if(currentRoom==='Global') return;
   const parts = currentRoom.split('_');
-  const friend = parts[0] === username ? parts[1] : parts[0];
+  const friend = parts[0]===username?parts[1]:parts[0];
   const conn = connections[friend];
-  if(conn && conn.open){
-    try{ conn.send({type:'typing', from: username, room: currentRoom}); } catch(e){}
-  }
+  if(conn && conn.open) try{ conn.send({type:'typing', from: username, room:currentRoom}); }catch(e){}
 });
 
-/* ======= Send button ======= */
-sendBtn.onclick = ()=> {
+sendBtn.onclick = ()=>{
   const text = msgInput.value.trim();
   if(!text) return;
   sendMessage(text);
-  msgInput.value = '';
+  msgInput.value='';
 };
 
-/* ======= Logout ======= */
 logoutBtn.onclick = ()=>{
   sessionStorage.clear();
-  window.location.href = 'login.html';
+  window.location.href='login.html';
 };
 
-/* ======= Theme toggle ======= */
 themeToggle.onclick = ()=>{
-  const cur = document.body.getAttribute('data-theme') || 'light';
-  document.body.setAttribute('data-theme', cur === 'light' ? 'dark' : 'light');
+  const cur = document.body.getAttribute('data-theme')||'light';
+  document.body.setAttribute('data-theme', cur==='light'?'dark':'light');
 };
 
-/* ======= PeerJS setup & auto-connect existing rooms ======= */
 function loadInitial(){
-  // load persisted global messages if present (helpful for single-device tests)
-  if(!rooms['Global'] || rooms['Global'].length === 0){
-    rooms['Global'] = JSON.parse(localStorage.getItem(GLOBAL_KEY) || '[]');
+  if(!rooms['Global'] || rooms['Global'].length===0){
+    rooms['Global']=JSON.parse(localStorage.getItem(GLOBAL_KEY)||'[]');
   }
-  // ensure unread keys exist
-  for(const rk of Object.keys(rooms)) if(!unread[rk]) unread[rk] = 0;
-  // render initial UI
-  renderRooms();
-  renderChat();
+  for(const rk of Object.keys(rooms)) if(!unread[rk]) unread[rk]=0;
+  renderRooms(); renderChat();
 }
 
 loadInitial();
 
-peer = new Peer(username); // username used as peer id
-peer.on('open', id => {
-  // attempt to auto-connect to any known private rooms (so reload won't require manual re-add)
+peer = new Peer(username);
+peer.on('open', id=>{
   Object.keys(rooms).forEach(rk=>{
-    if(rk === 'Global') return;
+    if(rk==='Global') return;
     const friend = otherNameFromRoomKey(rk);
-    if(friend && friend !== username && !connections[friend]){
-      try{
-        const conn = peer.connect(friend, { reliable: true });
-        conn.on('open', ()=> setupConnection(conn));
-      }catch(e){}
+    if(friend && friend!==username && !connections[friend]){
+      try{ const conn = peer.connect(friend,{reliable:true}); conn.on('open',()=>setupConnection(conn)); }catch(e){}
     }
   });
   renderRooms();
 });
-
-peer.on('connection', conn => {
-  // Accept incoming connection
-  conn.on('open', ()=> setupConnection(conn));
-});
-
-/* ======= make sure UI enabled ======= */
-peer.on('open', ()=> {
-  msgInput.disabled = false; sendBtn.disabled = false;
-});
-
-/* ======= save state on unload ======= */
-window.addEventListener('beforeunload', ()=> saveState());
-
+peer.on('connection', conn=>{ conn.on('open',()=>setupConnection(conn)); });
+peer.on('open', ()=>{ msgInput.disabled=false; sendBtn.disabled=false; });
+window.addEventListener('beforeunload', ()=>saveState());
 </script>
 </body>
 </html>
