@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Hybrid Chat — Professional</title>
+<title>Hybrid Chat</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 // Firebase config
 const firebaseConfig = {
@@ -33,87 +33,91 @@ const settingsModal = document.getElementById("settingsModal");
 const closeSettings = document.getElementById("closeSettings");
 const themeToggle = document.getElementById("themeToggle");
 const logoutBtn = document.getElementById("logoutBtn");
-const addRoomBtn = document.getElementById("addRoomBtn");
+const newChatBtn = document.getElementById("newChatBtn");
 
 let currentUser = null;
-let currentRoom = "global";
-let rooms = { global: "🌍 Global Chat" };
-let unreadCount = {};
+let currentRoom = null;
+let rooms = {}; // {roomId: {label, members}}
+let unsubscribeRoom = null;
+
+// Show UI after login
+document.getElementById("main").style.display = "none";
+document.getElementById("sidebar").style.display = "none";
 
 // ---- AUTH ----
 onAuthStateChanged(auth, async (user) => {
-  if(!user){
-    // Automatically sign in anonymously
-    const anon = await signInAnonymously(auth);
-    currentUser = anon.user;
-  } else {
-    currentUser = user;
-  }
-  enableUI();
-  loadRooms();
-  loadRoom(currentRoom);
-  loadTheme();
-  requestNotificationPermission();
-});
-
-// ---- UI ENABLE ----
-function enableUI(){
+  if(!user) return;
+  currentUser = user;
   document.getElementById("main").style.display = "flex";
   document.getElementById("sidebar").style.display = "flex";
   msgInput.disabled = false;
   sendBtn.disabled = false;
-}
+  await loadRooms();
+  loadTheme();
+  requestPermissionNotification();
+});
 
-// ---- ROOM MANAGEMENT ----
-function loadRooms(){
+// ---- LOAD ROOMS (global + private/group) ----
+async function loadRooms(){
   roomsContainer.innerHTML = "";
-  for(const [id,label] of Object.entries(rooms)){
-    addRoomButton(id,label);
+  rooms = {};
+
+  // Global chat
+  rooms["global"] = {label:"🌍 Global Chat", members:[]};
+
+  // Load user's private/group chats
+  const roomsSnap = await getDoc(doc(db,"userRooms",currentUser.uid));
+  if(roomsSnap.exists()){
+    const userRooms = roomsSnap.data();
+    for(const [id,data] of Object.entries(userRooms)){
+      rooms[id] = {label:data.label,members:data.members || []};
+    }
   }
+
+  for(const [id,data] of Object.entries(rooms)){
+    addRoomButton(id,data.label);
+  }
+
+  if(!currentRoom) loadRoom(Object.keys(rooms)[0]);
 }
 
+// ---- ADD ROOM BUTTON ----
 function addRoomButton(id,label){
   const btn = document.createElement("button");
-  btn.className = "room-btn" + (id===currentRoom?" active":"");
-  btn.innerText = label + (unreadCount[id]?` (${unreadCount[id]})`:"");
+  btn.className = "room-btn" + (id === currentRoom ? " active" : "");
+  btn.innerText = label;
   btn.onclick = () => loadRoom(id);
   roomsContainer.appendChild(btn);
 }
 
-function createRoom(name){
-  const id = "room_" + Math.random().toString(36).substring(2,8);
-  rooms[id] = name;
-  unreadCount[id] = 0;
-  addRoomButton(id,name);
-  return id;
-}
-
 // ---- LOAD ROOM ----
-let unsubscribeRoom = null;
 function loadRoom(roomId){
   currentRoom = roomId;
-  roomTitle.innerText = rooms[roomId] || roomId;
+  roomTitle.innerText = rooms[roomId]?.label || roomId;
   chatEl.innerHTML = "";
-  unreadCount[roomId] = 0;
 
   if(unsubscribeRoom) unsubscribeRoom();
 
-  const q = query(collection(db,"rooms",roomId,"messages"),orderBy("createdAt"));
+  const q = query(collection(db,"rooms",roomId,"messages"), orderBy("createdAt"));
   unsubscribeRoom = onSnapshot(q, snapshot => {
-    snapshot.docChanges().forEach(change => {
-      if(change.type==="added"){
-        const msg = change.doc.data();
-        appendMessage(msg);
-      }
+    chatEl.innerHTML = "";
+    snapshot.forEach(docSnap => {
+      const msg = docSnap.data();
+      appendMessage(msg);
     });
     chatEl.scrollTop = chatEl.scrollHeight;
   });
+
+  // Highlight active room button
+  document.querySelectorAll(".room-btn").forEach(b => b.classList.remove("active"));
+  const activeBtn = Array.from(document.querySelectorAll(".room-btn")).find(b => b.innerText===rooms[roomId].label);
+  if(activeBtn) activeBtn.classList.add("active");
 }
 
 // ---- SEND MESSAGE ----
 sendBtn.onclick = async () => {
   const text = msgInput.value.trim();
-  if(!text) return;
+  if(!text || !currentRoom) return;
   await addDoc(collection(db,"rooms",currentRoom,"messages"),{
     text,
     from: currentUser.uid,
@@ -125,49 +129,66 @@ sendBtn.onclick = async () => {
 // ---- APPEND MESSAGE ----
 function appendMessage(msg){
   const div = document.createElement("div");
-  div.className = "msg " + (msg.from === currentUser.uid?"self":"other");
+  div.className = "msg " + (msg.from === currentUser.uid ? "self" : "other");
   div.innerHTML = `<div>${msg.text}</div>
                    <div class="meta">${msg.from} • ${msg.createdAt?.toDate?.()?.toLocaleTimeString() || ""}</div>`;
   chatEl.appendChild(div);
 
-  if(msg.from !== currentUser.uid && Notification.permission==="granted"){
-    new Notification(`New message`, {body: msg.text});
+  if(msg.from !== currentUser.uid && Notification.permission === "granted"){
+    new Notification("New message", {body: msg.text});
   }
 }
 
-// ---- ADD GROUP CHAT ----
-const addGroupBtn = document.createElement("button");
-addGroupBtn.className="room-btn";
-addGroupBtn.innerText="+ New Group Chat";
-addGroupBtn.onclick = ()=>{
-  const name = prompt("Group chat name:");
-  if(!name) return;
-  const id = createRoom(name);
-  loadRoom(id);
-};
-roomsContainer.appendChild(addGroupBtn);
+// ---- CREATE PRIVATE/GROUP CHAT ----
+async function createChat(userIds,label){
+  const allIds = [currentUser.uid,...userIds].sort();
+  const roomId = `chat_${allIds.join("_")}`;
+  rooms[roomId] = {label,members:allIds};
+
+  // Save room for each member
+  for(const uid of allIds){
+    await setDoc(doc(db,"userRooms",uid), {[roomId]:{label,members:allIds}}, {merge:true});
+  }
+
+  addRoomButton(roomId,label);
+  loadRoom(roomId);
+}
 
 // ---- SETTINGS ----
-settingsBtn.onclick = ()=> settingsModal.style.display="flex";
-closeSettings.onclick = ()=> settingsModal.style.display="none";
+settingsBtn.onclick = ()=> settingsModal.style.display = "flex";
+closeSettings.onclick = ()=> settingsModal.style.display = "none";
 themeToggle.onclick = ()=>{
-  const theme = document.body.dataset.theme==="dark"?"light":"dark";
-  document.body.dataset.theme = theme;
+  const body = document.body;
+  const theme = body.dataset.theme==="dark"?"light":"dark";
+  body.dataset.theme = theme;
   localStorage.setItem("theme",theme);
 };
 logoutBtn.onclick = ()=> signOut(auth);
 
-// ---- THEME ----
+// ---- NEW CHAT BUTTON ----
+newChatBtn.onclick = async () => {
+  const emails = prompt("Enter comma-separated emails for the chat (other users):");
+  if(!emails) return;
+  const label = prompt("Enter a chat name:");
+  if(!label) return;
+
+  // Convert emails to UID (simple version)
+  const userIds = emails.split(",").map(e=>e.trim()); // Replace with real UID lookup in production
+  createChat(userIds,label);
+}
+
+// ---- LOAD THEME ----
 function loadTheme(){
   const saved = localStorage.getItem("theme") || "light";
   document.body.dataset.theme = saved;
 }
 
 // ---- NOTIFICATIONS ----
-function requestNotificationPermission(){
-  if("Notification" in window && Notification.permission==="default") Notification.requestPermission();
+function requestPermissionNotification(){
+  if("Notification" in window && Notification.permission==="default"){
+    Notification.requestPermission();
+  }
 }
-
 </script>
 
 <style>
@@ -182,7 +203,7 @@ function requestNotificationPermission(){
 html,body{margin:0;height:100%;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text);}
 .stage{display:flex;justify-content:center;align-items:center;height:100vh;padding:10px;box-sizing:border-box;}
 #app{display:flex;width:95%;max-width:1000px;height:85vh;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.1);}
-#sidebar{width:220px;background:var(--sidebar);color:#fff;padding:12px;display:flex;flex-direction:column;}
+#sidebar{width:250px;background:var(--sidebar);color:#fff;padding:12px;display:flex;flex-direction:column;}
 #sidebar h3{margin:0 0 12px;text-align:center;font-size:16px;}
 .room-btn{display:flex;align-items:center;justify-content:center;padding:8px;border-radius:8px;border:0;background:transparent;color:#fff;margin:6px 0;cursor:pointer;font-weight:600;}
 .room-btn.active{background:var(--sidebar-active);}
@@ -195,10 +216,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 .meta{font-size:11px;color:rgba(0,0,0,0.45);margin-top:4px;}
 footer{display:flex;gap:8px;padding:10px;background:transparent;border-top:1px solid rgba(0,0,0,0.06);}
 input.message{flex:1;padding:10px;border-radius:10px;border:1px solid #d6dbe0;font-size:14px;}
-button.send{padding:10px 12px;border-radius:10px;border:0;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;}
+button.send, button#newChatBtn{padding:10px 12px;border-radius:10px;border:0;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;}
 #settingsModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;}
-#settingsContent{background:var(--card);padding:20px;border-radius:12px;width:90%;max-width:400px;display:flex;flex-direction:column;gap:10px;}
-button#logoutBtn{margin-top:10px;}
+#settingsContent{background:var(--card);padding:20px;border-radius:12px;width:90%;max-width:400px;display:flex;flex-direction:column;}
+button#logoutBtn, button#closeSettings, button#themeToggle{margin-top:10px;}
 </style>
 
 <body data-theme="light">
@@ -207,6 +228,7 @@ button#logoutBtn{margin-top:10px;}
   <aside id="sidebar">
     <h3>Chats</h3>
     <div id="roomsContainer"></div>
+    <button id="newChatBtn" class="room-btn">➕ New Chat</button>
     <button id="settingsBtn" class="room-btn">⚙️ Settings</button>
   </aside>
 
