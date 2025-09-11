@@ -1,188 +1,213 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Hybrid Chat</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, doc, setDoc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+<meta charset="UTF-8">
+<title>Hybrid Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-    /* ==== Firebase Config ==== */
-    const firebaseConfig = {
-      apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
-      authDomain: "hybridchat-8a96c.firebaseapp.com",
-      projectId: "hybridchat-8a96c",
-      storageBucket: "hybridchat-8a96c.firebasestorage.app",
-      messagingSenderId: "8350065462",
-      appId: "1:8350065462:web:779c8fd3c81acaeebc8997"
-    };
+// Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
+  authDomain: "hybridchat-8a96c.firebaseapp.com",
+  projectId: "hybridchat-8a96c",
+  storageBucket: "hybridchat-8a96c.firebasestorage.app",
+  messagingSenderId: "8350065462",
+  appId: "1:8350065462:web:779c8fd3c81acaeebc8997"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
+// UI refs
+const chatEl = document.getElementById("chat");
+const roomsContainer = document.getElementById("roomsContainer");
+const msgInput = document.getElementById("msgInput");
+const sendBtn = document.getElementById("sendBtn");
+const roomTitle = document.getElementById("roomTitle");
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsModal = document.getElementById("settingsModal");
+const closeSettings = document.getElementById("closeSettings");
+const themeToggle = document.getElementById("themeToggle");
+const logoutBtn = document.getElementById("logoutBtn");
 
-    let currentUser = null;
-    let currentRoom = "global";
+let currentUser = null;
+let currentRoom = "global";
+const rooms = { global: "🌍 Global Chat" };
+let roomConnections = {}; // For group chats or private peers
+let unreadCount = {};
 
-    /* ==== Auth Enforcement ==== */
-    onAuthStateChanged(auth, user => {
-      if (!user) {
-        window.location.href = "login.html";
-      } else {
-        currentUser = user;
-        loadRoom("global"); // default to global
-        renderRooms();
-      }
+// Hide chat UI until login verified
+document.getElementById("main").style.display = "none";
+document.getElementById("sidebar").style.display = "none";
+
+// ---- AUTH ENFORCEMENT ----
+let redirecting = false;
+onAuthStateChanged(auth, async (user) => {
+  if(!user) {
+    if(!redirecting){ redirecting = true; window.location.href = "login.html"; }
+  } else {
+    currentUser = user;
+    document.getElementById("main").style.display = "flex";
+    document.getElementById("sidebar").style.display = "flex";
+    loadRooms();
+    loadRoom("global");
+    loadTheme();
+    requestPermissionNotification();
+  }
+});
+
+// ---- LOAD ROOMS ----
+function loadRooms(){
+  roomsContainer.innerHTML = "";
+  for(const [id,label] of Object.entries(rooms)){
+    addRoomButton(id,label);
+  }
+}
+
+// ---- ADD ROOM BUTTON ----
+function addRoomButton(id,label){
+  const btn = document.createElement("button");
+  btn.className = "room-btn" + (id === currentRoom ? " active" : "");
+  btn.innerText = label;
+  btn.onclick = () => loadRoom(id);
+  roomsContainer.appendChild(btn);
+}
+
+// ---- LOAD ROOM ----
+function loadRoom(roomId){
+  currentRoom = roomId;
+  roomTitle.innerText = rooms[roomId] || roomId;
+  chatEl.innerHTML = "";
+
+  const q = query(collection(db,"rooms",roomId,"messages"), orderBy("createdAt"));
+  onSnapshot(q, snapshot => {
+    chatEl.innerHTML = "";
+    snapshot.forEach(docSnap => {
+      const msg = docSnap.data();
+      appendMessage(msg);
     });
+    chatEl.scrollTop = chatEl.scrollHeight;
+  });
+}
 
-    /* ==== Rooms ==== */
-    const rooms = { global: "🌍 Global Chat" };
+// ---- APPEND MESSAGE ----
+function appendMessage(msg){
+  const div = document.createElement("div");
+  div.className = "msg " + (msg.from === currentUser.email ? "self" : "other");
+  div.innerHTML = `<div>${msg.text}</div>
+                   <div class="meta">${msg.from} • ${msg.createdAt?.toDate().toLocaleTimeString() || ""}</div>`;
+  chatEl.appendChild(div);
 
-    function renderRooms() {
-      const container = document.getElementById("roomsContainer");
-      container.innerHTML = "";
-      for (const [id, label] of Object.entries(rooms)) {
-        const btn = document.createElement("button");
-        btn.className = "room-btn" + (id === currentRoom ? " active" : "");
-        btn.innerText = label;
-        btn.onclick = () => loadRoom(id);
-        container.appendChild(btn);
-      }
+  // Push Notification if new message from other user
+  if(msg.from !== currentUser.email && Notification.permission === "granted"){
+    new Notification(`New message from ${msg.from}`, {body: msg.text});
+  }
+}
+
+// ---- SEND MESSAGE ----
+sendBtn.onclick = async () => {
+  const text = msgInput.value.trim();
+  if(!text) return;
+  await addDoc(collection(db,"rooms",currentRoom,"messages"),{
+    text,
+    from: currentUser.email,
+    createdAt: serverTimestamp()
+  });
+  msgInput.value = "";
+}
+
+// ---- SETTINGS ----
+settingsBtn.onclick = ()=> settingsModal.style.display = "flex";
+closeSettings.onclick = ()=> settingsModal.style.display = "none";
+themeToggle.onclick = ()=>{
+  const body = document.body;
+  const theme = body.dataset.theme==="dark"?"light":"dark";
+  body.dataset.theme = theme;
+  localStorage.setItem("theme",theme);
+};
+logoutBtn.onclick = ()=> signOut(auth);
+
+// ---- LOAD SAVED THEME ----
+function loadTheme(){
+  const saved = localStorage.getItem("theme") || "light";
+  document.body.dataset.theme = saved;
+}
+
+// ---- PUSH NOTIFICATION PERMISSION ----
+function requestPermissionNotification(){
+  if("Notification" in window){
+    if(Notification.permission==="default"){
+      Notification.requestPermission();
     }
+  }
+}
 
-    async function createPrivateRoom(friendEmail) {
-      const roomId = [currentUser.email, friendEmail].sort().join("_");
-      rooms[roomId] = `💬 ${friendEmail}`;
-      renderRooms();
-      loadRoom(roomId);
-    }
+</script>
 
-    async function createGroupRoom(name, members) {
-      const roomId = "group_" + Date.now();
-      await setDoc(doc(db, "rooms", roomId), {
-        name,
-        members,
-        createdAt: serverTimestamp()
-      });
-      rooms[roomId] = `👥 ${name}`;
-      renderRooms();
-      loadRoom(roomId);
-    }
+<style>
+:root{
+  --bg:#f5f7fa; --sidebar:#2c3e50; --sidebar-active:#34495e; --accent:#3498db;
+  --text:#222; --card:#fff; --self:#2ecc71; --other:#bdc3c7;
+}
+[data-theme="dark"]{
+  --bg:#0f1112; --sidebar:#16202b; --sidebar-active:#25343e; --accent:#256aa2;
+  --text:#eaeef0; --card:#151718; --self:#27ae60; --other:#4b5563;
+}
+html,body{margin:0;height:100%;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text);}
+.stage{display:flex;justify-content:center;align-items:center;height:100vh;padding:10px;box-sizing:border-box;}
+#app{display:flex;width:95%;max-width:1000px;height:85vh;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.1);}
+#sidebar{width:220px;background:var(--sidebar);color:#fff;padding:12px;display:flex;flex-direction:column;}
+#sidebar h3{margin:0 0 12px;text-align:center;font-size:16px;}
+.room-btn{display:flex;align-items:center;justify-content:center;padding:8px;border-radius:8px;border:0;background:transparent;color:#fff;margin:6px 0;cursor:pointer;font-weight:600;}
+.room-btn.active{background:var(--sidebar-active);}
+#main{flex:1;display:flex;flex-direction:column;background:var(--card);}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--accent);color:#fff;}
+#chat{flex:1;overflow:auto;padding:14px;box-sizing:border-box;background:linear-gradient(180deg,rgba(0,0,0,0.02),transparent);}
+.msg{clear:both;max-width:75%;padding:10px 12px;border-radius:12px;margin:8px 0;word-break:break-word;}
+.self{background:var(--self);color:#fff;float:right;border-bottom-right-radius:4px;}
+.other{background:var(--other);float:left;color:#111;border-bottom-left-radius:4px;}
+.meta{font-size:11px;color:rgba(0,0,0,0.45);margin-top:4px;}
+footer{display:flex;gap:8px;padding:10px;background:transparent;border-top:1px solid rgba(0,0,0,0.06);}
+input.message{flex:1;padding:10px;border-radius:10px;border:1px solid #d6dbe0;font-size:14px;}
+button.send{padding:10px 12px;border-radius:10px;border:0;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;}
+#settingsModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;}
+#settingsContent{background:var(--card);padding:20px;border-radius:12px;width:90%;max-width:400px;}
+button#logoutBtn{margin-top:10px;}
+</style>
 
-    /* ==== Messages ==== */
-    function loadRoom(roomId) {
-      currentRoom = roomId;
-      document.getElementById("chat").innerHTML = "";
-      document.getElementById("roomTitle").innerText = rooms[roomId] || "Chat";
-
-      const q = query(collection(db, "rooms", roomId, "messages"), orderBy("createdAt"));
-      onSnapshot(q, snapshot => {
-        const chat = document.getElementById("chat");
-        chat.innerHTML = "";
-        snapshot.forEach(docSnap => {
-          const msg = docSnap.data();
-          const div = document.createElement("div");
-          div.className = "msg " + (msg.from === currentUser.email ? "self" : "other");
-          div.innerHTML = `<div>${msg.text}</div><div class="meta">${msg.from} • ${msg.createdAt?.toDate().toLocaleTimeString() || ""}</div>`;
-          chat.appendChild(div);
-        });
-        chat.scrollTop = chat.scrollHeight;
-      });
-    }
-
-    async function sendMessage() {
-      const input = document.getElementById("msgInput");
-      const text = input.value.trim();
-      if (!text) return;
-      await addDoc(collection(db, "rooms", currentRoom, "messages"), {
-        text,
-        from: currentUser.email,
-        createdAt: serverTimestamp()
-      });
-      input.value = "";
-    }
-
-    /* ==== Settings ==== */
-    function toggleTheme() {
-      const body = document.body;
-      const theme = body.dataset.theme === "dark" ? "light" : "dark";
-      body.dataset.theme = theme;
-      localStorage.setItem("theme", theme);
-    }
-
-    window.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("sendBtn").onclick = sendMessage;
-      document.getElementById("settingsBtn").onclick = () => document.getElementById("settingsModal").style.display = "block";
-      document.getElementById("closeSettings").onclick = () => document.getElementById("settingsModal").style.display = "none";
-      document.getElementById("themeToggle").onclick = toggleTheme;
-      document.getElementById("logoutBtn").onclick = () => signOut(auth);
-
-      // load saved theme
-      const savedTheme = localStorage.getItem("theme") || "light";
-      document.body.dataset.theme = savedTheme;
-    });
-
-  </script>
-
-  <style>
-    :root {
-      --bg: #f4f5f7; --sidebar:#2c3e50; --accent:#3498db;
-      --text:#222; --self:#2ecc71; --other:#bdc3c7;
-    }
-    [data-theme="dark"] {
-      --bg:#0f1112; --sidebar:#16202b; --accent:#256aa2;
-      --text:#eaeef0; --self:#27ae60; --other:#4b5563;
-    }
-    body { margin:0; height:100vh; font-family:Arial, sans-serif; background:var(--bg); color:var(--text); display:flex; }
-    #sidebar { width:220px; background:var(--sidebar); color:#fff; padding:12px; display:flex; flex-direction:column; }
-    .room-btn { padding:10px; margin:4px 0; border:none; background:none; color:#fff; text-align:left; cursor:pointer; border-radius:6px; }
-    .room-btn.active, .room-btn:hover { background:rgba(255,255,255,0.1); }
-    #main { flex:1; display:flex; flex-direction:column; }
-    header { background:var(--accent); color:#fff; padding:10px; font-weight:bold; display:flex; justify-content:space-between; align-items:center; }
-    #chat { flex:1; padding:12px; overflow-y:auto; }
-    .msg { max-width:70%; padding:10px; margin:6px; border-radius:8px; }
-    .self { background:var(--self); color:#fff; margin-left:auto; }
-    .other { background:var(--other); }
-    .meta { font-size:11px; opacity:0.7; margin-top:4px; }
-    footer { display:flex; padding:10px; border-top:1px solid #ccc; }
-    footer input { flex:1; padding:10px; border-radius:8px; border:1px solid #ccc; }
-    footer button { margin-left:8px; padding:10px 14px; border:none; border-radius:8px; background:var(--accent); color:#fff; cursor:pointer; }
-    /* Settings modal */
-    #settingsModal { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; }
-    #settingsContent { background:var(--bg); padding:20px; border-radius:10px; min-width:300px; }
-    #settingsContent h2 { margin-top:0; }
-    #closeSettings { float:right; cursor:pointer; font-size:18px; }
-    #settingsContent button { display:block; width:100%; margin:10px 0; padding:10px; border:none; border-radius:6px; cursor:pointer; }
-  </style>
-</head>
 <body data-theme="light">
+<div class="stage">
+<div id="app">
   <aside id="sidebar">
     <h3>Chats</h3>
     <div id="roomsContainer"></div>
     <button id="settingsBtn" class="room-btn">⚙️ Settings</button>
   </aside>
 
-  <div id="main">
+  <main id="main">
     <header>
-      <div id="roomTitle">Chat</div>
+      <div id="roomTitle">—</div>
     </header>
     <section id="chat"></section>
     <footer>
-      <input id="msgInput" placeholder="Type a message…" />
-      <button id="sendBtn">Send</button>
+      <input id="msgInput" class="message" placeholder="Type a message…" disabled>
+      <button id="sendBtn" class="send" disabled>Send</button>
     </footer>
-  </div>
+  </main>
+</div>
+</div>
 
-  <!-- Settings Modal -->
-  <div id="settingsModal">
-    <div id="settingsContent">
-      <span id="closeSettings">❌</span>
-      <h2>Settings</h2>
-      <button id="themeToggle">Toggle Theme</button>
-      <button id="logoutBtn">Logout</button>
-    </div>
+<div id="settingsModal">
+  <div id="settingsContent">
+    <h3>Settings</h3>
+    <button id="themeToggle">Toggle Theme</button>
+    <button id="logoutBtn">Logout</button>
+    <button id="closeSettings">Close</button>
   </div>
+</div>
 </body>
 </html>
