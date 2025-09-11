@@ -1,188 +1,55 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Hybrid Chat</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="manifest.json">
-<script type="module">
-  // Firebase imports
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-  import { getDatabase, ref, push, onChildAdded, set, get } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+// Firebase imports (same as before)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getDatabase, ref, push, onChildAdded, set } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 
-  // Firebase config
-  const firebaseConfig = {
-    apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
-    authDomain: "hybridchat-8a96c.firebaseapp.com",
-    databaseURL: "https://hybridchat-8a96c-default-rtdb.firebaseio.com",
-    projectId: "hybridchat-8a96c",
-    storageBucket: "hybridchat-8a96c.appspot.com",
-    messagingSenderId: "8350065462",
-    appId: "1:8350065462:web:779c8fd3c81acaeebc8997"
-  };
+// Firebase config
+const firebaseConfig = { /* your config */ };
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  const auth = getAuth(app);
+let currentUser = null;
+let tempUserId = "guest_" + Math.random().toString(36).substring(2,10); // temporary UID
+let currentRoom = "Global";
 
-  let currentUser = null;
-
-  const chatContainer = document.getElementById("chat");
-  const sendBtn = document.getElementById("sendBtn");
-  const msgInput = document.getElementById("msgInput");
-  const roomsList = document.getElementById("roomsList");
-  const loginBtn = document.getElementById("loginBtn");
-  const settingsBtn = document.getElementById("settingsBtn");
-  const logoutBtn = document.getElementById("logoutBtn");
-  const themeToggle = document.getElementById("themeToggle");
-
-  let currentRoom = "Global";
-  let rooms = {}; // {roomName: [messages]}
-  let userRooms = {}; // mapping of usernames to private rooms
-  let theme = localStorage.getItem("theme") || "light";
-  document.body.setAttribute("data-theme", theme);
-
-  // Auto login or anonymous
-  onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      currentUser = user;
-      loginBtn.style.display = "none";
-    } else {
-      const anonUser = await signInAnonymously(auth);
-      currentUser = anonUser.user;
-      loginBtn.style.display = "inline-block";
-    }
-    initRooms();
-  });
-
-  // Initialize rooms
-  function initRooms() {
-    // Listen for global messages
-    const globalRef = ref(db, "global");
-    onChildAdded(globalRef, (snapshot) => {
-      const msg = snapshot.val();
-      appendMessage("Global", msg);
-    });
-
-    // Listen for private messages (any room where user is participant)
-    const privateRef = ref(db, "private");
-    onChildAdded(privateRef, (snapshot) => {
-      const roomData = snapshot.val();
-      if (roomData.participants.includes(currentUser.uid)) {
-        appendMessage(roomData.roomName, {sender: roomData.sender, text: roomData.text});
-      }
-    });
+// Auto-login or anonymous
+onAuthStateChanged(auth, async (user) => {
+  if(user){
+    currentUser = user;
+    loginBtn.style.display = "none";
+  } else {
+    currentUser = { uid: tempUserId }; // anonymous temp user
+    loginBtn.style.display = "inline-block";
   }
+  initRooms();
+});
 
-  // Append message to chat UI
-  function appendMessage(room, msg) {
-    if (room !== currentRoom) return;
-    const div = document.createElement("div");
-    div.className = msg.sender === currentUser.uid ? "msg self" : "msg other";
-    div.textContent = `${msg.sender === currentUser.uid ? "You" : msg.sender}: ${msg.text}`;
-    chatContainer.appendChild(div);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
-    // push notification
-    if (Notification.permission === "granted" && msg.sender !== currentUser.uid) {
-      new Notification("New message", {body: msg.text});
-    }
+// Send message (anyone can send)
+sendBtn.addEventListener("click", () => {
+  const text = msgInput.value.trim();
+  if(!text) return;
+  msgInput.value = "";
+
+  const senderId = currentUser.uid;
+  if(currentRoom === "Global"){
+    push(ref(db,"global"), { sender: senderId, text });
+  } else {
+    const roomRef = ref(db, `private/${currentRoom}`);
+    push(roomRef, { sender: senderId, text, roomName: currentRoom, participants: currentRoom.split("_") });
   }
+});
 
-  // Send message
-  sendBtn.addEventListener("click", () => {
-    const text = msgInput.value.trim();
-    if (!text) return;
-    msgInput.value = "";
-
-    if (currentRoom === "Global") {
-      const globalRef = ref(db, "global");
-      push(globalRef, {sender: currentUser.uid, text});
-    } else {
-      // private room
-      const roomRef = ref(db, `private/${currentRoom}`);
-      push(roomRef, {sender: currentUser.uid, text, roomName: currentRoom, participants: currentRoom.split("_")});
-    }
-  });
-
-  // Room switching
-  roomsList.addEventListener("click", (e) => {
-    if (e.target.dataset.room) {
-      currentRoom = e.target.dataset.room;
-      chatContainer.innerHTML = "";
-    }
-  });
-
-  // Add new private chat
-  document.getElementById("addFriend").addEventListener("click", async () => {
-    const username = prompt("Enter username of friend");
-    if (!username || username === currentUser.uid) return;
-    const roomName = [currentUser.uid, username].sort().join("_");
-    currentRoom = roomName;
-    chatContainer.innerHTML = "";
-    // save room mapping
-    userRooms[username] = roomName;
-    const roomRef = ref(db, `private/${roomName}`);
-    set(roomRef, {participants: [currentUser.uid, username], sender: "", text: "", roomName}); // ensures room exists
-  });
-
-  // Login button (optional)
-  loginBtn.addEventListener("click", () => alert("Login feature can be implemented here."));
-
-  // Logout
-  logoutBtn.addEventListener("click", () => auth.signOut());
-
-  // Theme toggle
-  themeToggle.addEventListener("click", () => {
-    theme = theme === "light" ? "dark" : "light";
-    document.body.setAttribute("data-theme", theme);
-    localStorage.setItem("theme", theme);
-  });
-
-  // Notifications permission
-  if ("Notification" in window) {
-    Notification.requestPermission();
+// Login button (optional login)
+loginBtn.addEventListener("click", async () => {
+  const email = prompt("Enter email (or username)"); 
+  const password = prompt("Enter password"); 
+  try{
+    const userCredential = await signInWithEmailAndPassword(auth,email,password);
+    currentUser = userCredential.user;
+    loginBtn.style.display = "none";
+    alert("Logged in as " + currentUser.uid);
+  } catch(e){
+    alert("Login failed: "+e.message);
   }
-</script>
-
-<style>
-  body[data-theme="light"]{--bg:#f5f7fa;--text:#222;--card:#fff;--accent:#3498db;}
-  body[data-theme="dark"]{--bg:#121212;--text:#eee;--card:#1e1e1e;--accent:#256aa2;}
-  body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text);}
-  .container{display:flex;height:100vh;}
-  #sidebar{width:220px;background:#2c3e50;padding:10px;box-sizing:border-box;display:flex;flex-direction:column;}
-  #roomsList button{width:100%;margin:3px 0;padding:6px;background:#34495e;border:none;color:white;border-radius:6px;cursor:pointer;}
-  #main{flex:1;display:flex;flex-direction:column;}
-  #chat{flex:1;overflow:auto;padding:10px;}
-  footer{display:flex;padding:5px;gap:5px;border-top:1px solid rgba(0,0,0,0.1);}
-  input, button{border-radius:6px;padding:6px;}
-  input{flex:1;border:1px solid #ccc;}
-  button{background:var(--accent);border:none;color:white;cursor:pointer;}
-  .msg{margin:5px;padding:8px;border-radius:8px;max-width:70%;}
-  .self{background:var(--accent);color:white;align-self:flex-end;}
-  .other{background:#ccc;align-self:flex-start;}
-</style>
-
-<body data-theme="light">
-<div class="container">
-  <aside id="sidebar">
-    <h3>Chats</h3>
-    <div id="roomsList">
-      <button data-room="Global">🌍 Global</button>
-    </div>
-    <button id="addFriend">+ New Chat</button>
-    <button id="loginBtn">Login</button>
-    <button id="settingsBtn">Settings</button>
-    <button id="logoutBtn">Logout</button>
-    <button id="themeToggle">Toggle Theme</button>
-  </aside>
-  <main id="main">
-    <div id="chat"></div>
-    <footer>
-      <input type="text" id="msgInput" placeholder="Type a message...">
-      <button id="sendBtn">Send</button>
-    </footer>
-  </main>
-</div>
-</body>
-</html>
+});
