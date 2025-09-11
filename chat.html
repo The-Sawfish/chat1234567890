@@ -2,12 +2,95 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Hybrid Chat</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hybrid Chat — Firebase</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --card: #fff;
+    --accent: #3498db;
+    --text: #222;
+    --self: #2ecc71;
+    --other: #bdc3c7;
+  }
+  [data-theme="dark"] {
+    --bg: #0f1112;
+    --card: #151718;
+    --accent: #256aa2;
+    --text: #eaeef0;
+    --self: #27ae60;
+    --other: #4b5563;
+  }
+  body, html { margin:0; padding:0; font-family: Arial, sans-serif; height:100%; background: var(--bg); color: var(--text); }
+  .stage { display:flex; justify-content:center; align-items:center; height:100vh; padding:10px; box-sizing:border-box; }
+  #app { display:flex; flex-direction:row; width:95%; max-width:1000px; height:85vh; border-radius:12px; overflow:hidden; box-shadow:0 8px 30px rgba(2,6,23,.12); }
+  #sidebar { width:220px; background:#2c3e50; color:#fff; padding:12px; display:flex; flex-direction:column; }
+  #sidebar h3 { text-align:center; margin:0 0 12px; }
+  .room-btn { display:flex; justify-content:space-between; align-items:center; padding:8px; border-radius:8px; background:transparent; border:none; color:#fff; margin:4px 0; cursor:pointer; font-weight:600; }
+  .room-btn.active { background:#34495e; }
+  .badge { background:#ff4d4f; border-radius:999px; padding:2px 7px; font-size:12px; margin-left:6px; }
+  .controls { margin-top:auto; display:flex; flex-direction:column; gap:6px; }
+  .btn-flat { background: var(--accent); color:#fff; border:none; padding:8px 10px; border-radius:8px; cursor:pointer; font-weight:700; }
+  #main { flex:1; display:flex; flex-direction:column; background: var(--card); border-radius:8px; overflow:hidden; }
+  header { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background: var(--accent); color:#fff; }
+  #chat { flex:1; overflow-y:auto; padding:12px; background: linear-gradient(180deg, rgba(0,0,0,0.02), transparent); }
+  .msg { max-width:70%; padding:10px 12px; border-radius:12px; margin:6px 0; word-break:break-word; }
+  .self { background: var(--self); color:#fff; align-self:flex-end; border-bottom-right-radius:4px; }
+  .other { background: var(--other); color:#111; align-self:flex-start; border-bottom-left-radius:4px; }
+  .meta { font-size:11px; color:rgba(0,0,0,0.45); margin-top:4px; }
+  footer { display:flex; gap:8px; padding:8px; background:#f0f0f0; }
+  input.message { flex:1; padding:10px; border-radius:10px; border:1px solid #ccc; font-size:14px; }
+  button.send { padding:10px 14px; border-radius:10px; border:none; background: var(--accent); color:#fff; cursor:pointer; font-weight:700; }
+  #settingsModal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; }
+  #settingsContent { background: var(--card); padding:20px; border-radius:12px; width:90%; max-width:400px; display:flex; flex-direction:column; gap:12px; }
+  .closeSettings { align-self:flex-end; cursor:pointer; font-size:18px; }
+</style>
+</head>
+<body data-theme="light">
+<div class="stage">
+  <div id="app">
+    <aside id="sidebar">
+      <h3>Chats</h3>
+      <div id="roomsContainer"></div>
+      <div class="controls">
+        <button id="addRoomBtn" class="btn-flat">+ New Chat</button>
+        <button id="loginBtn" class="btn-flat">Log In</button>
+        <button id="settingsBtn" class="btn-flat">Settings</button>
+      </div>
+    </aside>
+    <main id="main">
+      <header>
+        <div id="roomTitle">Global Chat</div>
+      </header>
+      <section id="chat"></section>
+      <footer>
+        <input type="text" id="msgInput" class="message" placeholder="Type a message…">
+        <button id="sendBtn" class="send">Send</button>
+      </footer>
+    </main>
+  </div>
+</div>
+
+<div id="settingsModal">
+  <div id="settingsContent">
+    <span id="closeSettings" class="closeSettings">✖</span>
+    <h3>Settings</h3>
+    <button id="themeToggle" class="btn-flat">Toggle Dark/Light</button>
+    <button id="logoutBtn" class="btn-flat">Logout</button>
+    <label>Choose Background:</label>
+    <select id="bgSelect">
+      <option value="light">Light</option>
+      <option value="dark">Dark</option>
+      <option value="blue">Blue</option>
+      <option value="green">Green</option>
+    </select>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, arrayUnion, doc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 // Firebase config
 const firebaseConfig = {
@@ -18,11 +101,16 @@ const firebaseConfig = {
   messagingSenderId: "8350065462",
   appId: "1:8350065462:web:779c8fd3c81acaeebc8997"
 };
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// UI refs
+let currentUser = null;
+let currentRoom = "global";
+const rooms = { global: "🌍 Global Chat" };
+
+// UI elements
 const chatEl = document.getElementById("chat");
 const roomsContainer = document.getElementById("roomsContainer");
 const msgInput = document.getElementById("msgInput");
@@ -33,51 +121,31 @@ const settingsModal = document.getElementById("settingsModal");
 const closeSettings = document.getElementById("closeSettings");
 const themeToggle = document.getElementById("themeToggle");
 const logoutBtn = document.getElementById("logoutBtn");
+const loginBtn = document.getElementById("loginBtn");
+const addRoomBtn = document.getElementById("addRoomBtn");
+const bgSelect = document.getElementById("bgSelect");
 
-let currentUser = null;
-let currentRoom = "global";
-const rooms = { global: "🌍 Global Chat" };
-let roomConnections = {}; // For group chats or private peers
-let unreadCount = {};
-
-// Hide chat UI until login verified
-document.getElementById("main").style.display = "none";
-document.getElementById("sidebar").style.display = "none";
-
-// ---- AUTH ENFORCEMENT ----
-let redirecting = false;
-onAuthStateChanged(auth, async (user) => {
-  if(!user) {
-    if(!redirecting){ redirecting = true; window.location.href = "login.html"; }
-  } else {
-    currentUser = user;
-    document.getElementById("main").style.display = "flex";
-    document.getElementById("sidebar").style.display = "flex";
-    loadRooms();
-    loadRoom("global");
-    loadTheme();
-    requestPermissionNotification();
-  }
+// ------------------- AUTH --------------------
+onAuthStateChanged(auth, user => {
+  currentUser = user;
+  loginBtn.style.display = currentUser ? "none" : "block";
+  loadRooms();
+  loadRoom(currentRoom);
 });
 
-// ---- LOAD ROOMS ----
-function loadRooms(){
+// ------------------- ROOMS -------------------
+function loadRooms() {
   roomsContainer.innerHTML = "";
   for(const [id,label] of Object.entries(rooms)){
-    addRoomButton(id,label);
+    const btn = document.createElement("button");
+    btn.className = "room-btn" + (id===currentRoom?" active":"");
+    btn.innerText = label;
+    btn.onclick = ()=> loadRoom(id);
+    roomsContainer.appendChild(btn);
   }
 }
 
-// ---- ADD ROOM BUTTON ----
-function addRoomButton(id,label){
-  const btn = document.createElement("button");
-  btn.className = "room-btn" + (id === currentRoom ? " active" : "");
-  btn.innerText = label;
-  btn.onclick = () => loadRoom(id);
-  roomsContainer.appendChild(btn);
-}
-
-// ---- LOAD ROOM ----
+// ------------------- LOAD ROOM -------------------
 function loadRoom(roomId){
   currentRoom = roomId;
   roomTitle.innerText = rooms[roomId] || roomId;
@@ -86,7 +154,7 @@ function loadRoom(roomId){
   const q = query(collection(db,"rooms",roomId,"messages"), orderBy("createdAt"));
   onSnapshot(q, snapshot => {
     chatEl.innerHTML = "";
-    snapshot.forEach(docSnap => {
+    snapshot.forEach(docSnap=>{
       const msg = docSnap.data();
       appendMessage(msg);
     });
@@ -94,22 +162,23 @@ function loadRoom(roomId){
   });
 }
 
-// ---- APPEND MESSAGE ----
+// ------------------- APPEND MESSAGE -------------------
 function appendMessage(msg){
   const div = document.createElement("div");
-  div.className = "msg " + (msg.from === currentUser.email ? "self" : "other");
+  div.className = "msg "+((currentUser && msg.from===currentUser.email)?"self":"other");
   div.innerHTML = `<div>${msg.text}</div>
                    <div class="meta">${msg.from} • ${msg.createdAt?.toDate().toLocaleTimeString() || ""}</div>`;
   chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
 
-  // Push Notification if new message from other user
-  if(msg.from !== currentUser.email && Notification.permission === "granted"){
+  if(msg.from !== (currentUser?.email||"") && Notification.permission==="granted"){
     new Notification(`New message from ${msg.from}`, {body: msg.text});
   }
 }
 
-// ---- SEND MESSAGE ----
-sendBtn.onclick = async () => {
+// ------------------- SEND MESSAGE -------------------
+sendBtn.onclick = async ()=>{
+  if(!currentUser){ alert("Log in to send messages"); return; }
   const text = msgInput.value.trim();
   if(!text) return;
   await addDoc(collection(db,"rooms",currentRoom,"messages"),{
@@ -120,94 +189,54 @@ sendBtn.onclick = async () => {
   msgInput.value = "";
 }
 
-// ---- SETTINGS ----
-settingsBtn.onclick = ()=> settingsModal.style.display = "flex";
-closeSettings.onclick = ()=> settingsModal.style.display = "none";
+// ------------------- SETTINGS -------------------
+settingsBtn.onclick = ()=> settingsModal.style.display="flex";
+closeSettings.onclick = ()=> settingsModal.style.display="none";
+
 themeToggle.onclick = ()=>{
   const body = document.body;
-  const theme = body.dataset.theme==="dark"?"light":"dark";
-  body.dataset.theme = theme;
-  localStorage.setItem("theme",theme);
-};
-logoutBtn.onclick = ()=> signOut(auth);
-
-// ---- LOAD SAVED THEME ----
-function loadTheme(){
-  const saved = localStorage.getItem("theme") || "light";
-  document.body.dataset.theme = saved;
+  const newTheme = body.dataset.theme==="dark"?"light":"dark";
+  body.dataset.theme = newTheme;
+  localStorage.setItem("theme", newTheme);
 }
 
-// ---- PUSH NOTIFICATION PERMISSION ----
-function requestPermissionNotification(){
-  if("Notification" in window){
-    if(Notification.permission==="default"){
-      Notification.requestPermission();
-    }
+logoutBtn.onclick = ()=> signOut(auth);
+
+loginBtn.onclick = ()=> window.location.href="login.html";
+
+// ------------------- BACKGROUND SELECT -------------------
+bgSelect.onchange = (e)=>{
+  const val = e.target.value;
+  switch(val){
+    case "light": document.body.style.background="#f5f7fa"; break;
+    case "dark": document.body.style.background="#0f1112"; break;
+    case "blue": document.body.style.background="#e0f0ff"; break;
+    case "green": document.body.style.background="#e0ffe0"; break;
   }
 }
 
+// ------------------- ADD ROOM -------------------
+addRoomBtn.onclick = ()=>{
+  const name = prompt("Enter usernames (comma-separated) for group chat:");
+  if(!name) return;
+  const users = name.split(",").map(u=>u.trim()).filter(u=>u.length);
+  if(currentUser) users.push(currentUser.email);
+  const roomId = users.sort().join("_");
+  rooms[roomId] = "💬 "+users.join(", ");
+  loadRooms();
+  loadRoom(roomId);
+}
+
+// ------------------- LOAD THEME -------------------
+(function(){
+  const saved = localStorage.getItem("theme")||"light";
+  document.body.dataset.theme = saved;
+})();
+
+// ------------------- PUSH NOTIFICATIONS -------------------
+if("Notification" in window){
+  if(Notification.permission==="default") Notification.requestPermission();
+}
 </script>
-
-<style>
-:root{
-  --bg:#f5f7fa; --sidebar:#2c3e50; --sidebar-active:#34495e; --accent:#3498db;
-  --text:#222; --card:#fff; --self:#2ecc71; --other:#bdc3c7;
-}
-[data-theme="dark"]{
-  --bg:#0f1112; --sidebar:#16202b; --sidebar-active:#25343e; --accent:#256aa2;
-  --text:#eaeef0; --card:#151718; --self:#27ae60; --other:#4b5563;
-}
-html,body{margin:0;height:100%;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text);}
-.stage{display:flex;justify-content:center;align-items:center;height:100vh;padding:10px;box-sizing:border-box;}
-#app{display:flex;width:95%;max-width:1000px;height:85vh;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.1);}
-#sidebar{width:220px;background:var(--sidebar);color:#fff;padding:12px;display:flex;flex-direction:column;}
-#sidebar h3{margin:0 0 12px;text-align:center;font-size:16px;}
-.room-btn{display:flex;align-items:center;justify-content:center;padding:8px;border-radius:8px;border:0;background:transparent;color:#fff;margin:6px 0;cursor:pointer;font-weight:600;}
-.room-btn.active{background:var(--sidebar-active);}
-#main{flex:1;display:flex;flex-direction:column;background:var(--card);}
-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--accent);color:#fff;}
-#chat{flex:1;overflow:auto;padding:14px;box-sizing:border-box;background:linear-gradient(180deg,rgba(0,0,0,0.02),transparent);}
-.msg{clear:both;max-width:75%;padding:10px 12px;border-radius:12px;margin:8px 0;word-break:break-word;}
-.self{background:var(--self);color:#fff;float:right;border-bottom-right-radius:4px;}
-.other{background:var(--other);float:left;color:#111;border-bottom-left-radius:4px;}
-.meta{font-size:11px;color:rgba(0,0,0,0.45);margin-top:4px;}
-footer{display:flex;gap:8px;padding:10px;background:transparent;border-top:1px solid rgba(0,0,0,0.06);}
-input.message{flex:1;padding:10px;border-radius:10px;border:1px solid #d6dbe0;font-size:14px;}
-button.send{padding:10px 12px;border-radius:10px;border:0;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;}
-#settingsModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;}
-#settingsContent{background:var(--card);padding:20px;border-radius:12px;width:90%;max-width:400px;}
-button#logoutBtn{margin-top:10px;}
-</style>
-
-<body data-theme="light">
-<div class="stage">
-<div id="app">
-  <aside id="sidebar">
-    <h3>Chats</h3>
-    <div id="roomsContainer"></div>
-    <button id="settingsBtn" class="room-btn">⚙️ Settings</button>
-  </aside>
-
-  <main id="main">
-    <header>
-      <div id="roomTitle">—</div>
-    </header>
-    <section id="chat"></section>
-    <footer>
-      <input id="msgInput" class="message" placeholder="Type a message…" disabled>
-      <button id="sendBtn" class="send" disabled>Send</button>
-    </footer>
-  </main>
-</div>
-</div>
-
-<div id="settingsModal">
-  <div id="settingsContent">
-    <h3>Settings</h3>
-    <button id="themeToggle">Toggle Theme</button>
-    <button id="logoutBtn">Logout</button>
-    <button id="closeSettings">Close</button>
-  </div>
-</div>
 </body>
 </html>
