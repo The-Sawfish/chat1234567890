@@ -1,55 +1,235 @@
-// Firebase imports (same as before)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hybrid Chat — Professional</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-import { getDatabase, ref, push, onChildAdded, set } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 // Firebase config
-const firebaseConfig = { /* your config */ };
+const firebaseConfig = {
+  apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
+  authDomain: "hybridchat-8a96c.firebaseapp.com",
+  projectId: "hybridchat-8a96c",
+  storageBucket: "hybridchat-8a96c.firebasestorage.app",
+  messagingSenderId: "8350065462",
+  appId: "1:8350065462:web:779c8fd3c81acaeebc8997"
+};
 const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
 const auth = getAuth(app);
+const db = getFirestore(app);
+
+// UI refs
+const chatEl = document.getElementById("chat");
+const roomsContainer = document.getElementById("roomsContainer");
+const msgInput = document.getElementById("msgInput");
+const sendBtn = document.getElementById("sendBtn");
+const roomTitle = document.getElementById("roomTitle");
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsModal = document.getElementById("settingsModal");
+const closeSettings = document.getElementById("closeSettings");
+const themeToggle = document.getElementById("themeToggle");
+const logoutBtn = document.getElementById("logoutBtn");
+const addRoomBtn = document.getElementById("addRoomBtn");
 
 let currentUser = null;
-let tempUserId = "guest_" + Math.random().toString(36).substring(2,10); // temporary UID
-let currentRoom = "Global";
+let currentRoom = "global";
+let rooms = { global: "🌍 Global Chat" };
+let unreadCount = {};
 
-// Auto-login or anonymous
+// ---- AUTH ----
 onAuthStateChanged(auth, async (user) => {
-  if(user){
-    currentUser = user;
-    loginBtn.style.display = "none";
+  if(!user){
+    // Automatically sign in anonymously
+    const anon = await signInAnonymously(auth);
+    currentUser = anon.user;
   } else {
-    currentUser = { uid: tempUserId }; // anonymous temp user
-    loginBtn.style.display = "inline-block";
+    currentUser = user;
   }
-  initRooms();
+  enableUI();
+  loadRooms();
+  loadRoom(currentRoom);
+  loadTheme();
+  requestNotificationPermission();
 });
 
-// Send message (anyone can send)
-sendBtn.addEventListener("click", () => {
+// ---- UI ENABLE ----
+function enableUI(){
+  document.getElementById("main").style.display = "flex";
+  document.getElementById("sidebar").style.display = "flex";
+  msgInput.disabled = false;
+  sendBtn.disabled = false;
+}
+
+// ---- ROOM MANAGEMENT ----
+function loadRooms(){
+  roomsContainer.innerHTML = "";
+  for(const [id,label] of Object.entries(rooms)){
+    addRoomButton(id,label);
+  }
+}
+
+function addRoomButton(id,label){
+  const btn = document.createElement("button");
+  btn.className = "room-btn" + (id===currentRoom?" active":"");
+  btn.innerText = label + (unreadCount[id]?` (${unreadCount[id]})`:"");
+  btn.onclick = () => loadRoom(id);
+  roomsContainer.appendChild(btn);
+}
+
+function createRoom(name){
+  const id = "room_" + Math.random().toString(36).substring(2,8);
+  rooms[id] = name;
+  unreadCount[id] = 0;
+  addRoomButton(id,name);
+  return id;
+}
+
+// ---- LOAD ROOM ----
+let unsubscribeRoom = null;
+function loadRoom(roomId){
+  currentRoom = roomId;
+  roomTitle.innerText = rooms[roomId] || roomId;
+  chatEl.innerHTML = "";
+  unreadCount[roomId] = 0;
+
+  if(unsubscribeRoom) unsubscribeRoom();
+
+  const q = query(collection(db,"rooms",roomId,"messages"),orderBy("createdAt"));
+  unsubscribeRoom = onSnapshot(q, snapshot => {
+    snapshot.docChanges().forEach(change => {
+      if(change.type==="added"){
+        const msg = change.doc.data();
+        appendMessage(msg);
+      }
+    });
+    chatEl.scrollTop = chatEl.scrollHeight;
+  });
+}
+
+// ---- SEND MESSAGE ----
+sendBtn.onclick = async () => {
   const text = msgInput.value.trim();
   if(!text) return;
+  await addDoc(collection(db,"rooms",currentRoom,"messages"),{
+    text,
+    from: currentUser.uid,
+    createdAt: serverTimestamp()
+  });
   msgInput.value = "";
+}
 
-  const senderId = currentUser.uid;
-  if(currentRoom === "Global"){
-    push(ref(db,"global"), { sender: senderId, text });
-  } else {
-    const roomRef = ref(db, `private/${currentRoom}`);
-    push(roomRef, { sender: senderId, text, roomName: currentRoom, participants: currentRoom.split("_") });
-  }
-});
+// ---- APPEND MESSAGE ----
+function appendMessage(msg){
+  const div = document.createElement("div");
+  div.className = "msg " + (msg.from === currentUser.uid?"self":"other");
+  div.innerHTML = `<div>${msg.text}</div>
+                   <div class="meta">${msg.from} • ${msg.createdAt?.toDate?.()?.toLocaleTimeString() || ""}</div>`;
+  chatEl.appendChild(div);
 
-// Login button (optional login)
-loginBtn.addEventListener("click", async () => {
-  const email = prompt("Enter email (or username)"); 
-  const password = prompt("Enter password"); 
-  try{
-    const userCredential = await signInWithEmailAndPassword(auth,email,password);
-    currentUser = userCredential.user;
-    loginBtn.style.display = "none";
-    alert("Logged in as " + currentUser.uid);
-  } catch(e){
-    alert("Login failed: "+e.message);
+  if(msg.from !== currentUser.uid && Notification.permission==="granted"){
+    new Notification(`New message`, {body: msg.text});
   }
-});
+}
+
+// ---- ADD GROUP CHAT ----
+const addGroupBtn = document.createElement("button");
+addGroupBtn.className="room-btn";
+addGroupBtn.innerText="+ New Group Chat";
+addGroupBtn.onclick = ()=>{
+  const name = prompt("Group chat name:");
+  if(!name) return;
+  const id = createRoom(name);
+  loadRoom(id);
+};
+roomsContainer.appendChild(addGroupBtn);
+
+// ---- SETTINGS ----
+settingsBtn.onclick = ()=> settingsModal.style.display="flex";
+closeSettings.onclick = ()=> settingsModal.style.display="none";
+themeToggle.onclick = ()=>{
+  const theme = document.body.dataset.theme==="dark"?"light":"dark";
+  document.body.dataset.theme = theme;
+  localStorage.setItem("theme",theme);
+};
+logoutBtn.onclick = ()=> signOut(auth);
+
+// ---- THEME ----
+function loadTheme(){
+  const saved = localStorage.getItem("theme") || "light";
+  document.body.dataset.theme = saved;
+}
+
+// ---- NOTIFICATIONS ----
+function requestNotificationPermission(){
+  if("Notification" in window && Notification.permission==="default") Notification.requestPermission();
+}
+
+</script>
+
+<style>
+:root{
+  --bg:#f5f7fa; --sidebar:#2c3e50; --sidebar-active:#34495e; --accent:#3498db;
+  --text:#222; --card:#fff; --self:#2ecc71; --other:#bdc3c7;
+}
+[data-theme="dark"]{
+  --bg:#0f1112; --sidebar:#16202b; --sidebar-active:#25343e; --accent:#256aa2;
+  --text:#eaeef0; --card:#151718; --self:#27ae60; --other:#4b5563;
+}
+html,body{margin:0;height:100%;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text);}
+.stage{display:flex;justify-content:center;align-items:center;height:100vh;padding:10px;box-sizing:border-box;}
+#app{display:flex;width:95%;max-width:1000px;height:85vh;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.1);}
+#sidebar{width:220px;background:var(--sidebar);color:#fff;padding:12px;display:flex;flex-direction:column;}
+#sidebar h3{margin:0 0 12px;text-align:center;font-size:16px;}
+.room-btn{display:flex;align-items:center;justify-content:center;padding:8px;border-radius:8px;border:0;background:transparent;color:#fff;margin:6px 0;cursor:pointer;font-weight:600;}
+.room-btn.active{background:var(--sidebar-active);}
+#main{flex:1;display:flex;flex-direction:column;background:var(--card);}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--accent);color:#fff;}
+#chat{flex:1;overflow:auto;padding:14px;box-sizing:border-box;background:linear-gradient(180deg,rgba(0,0,0,0.02),transparent);}
+.msg{clear:both;max-width:75%;padding:10px 12px;border-radius:12px;margin:8px 0;word-break:break-word;}
+.self{background:var(--self);color:#fff;float:right;border-bottom-right-radius:4px;}
+.other{background:var(--other);float:left;color:#111;border-bottom-left-radius:4px;}
+.meta{font-size:11px;color:rgba(0,0,0,0.45);margin-top:4px;}
+footer{display:flex;gap:8px;padding:10px;background:transparent;border-top:1px solid rgba(0,0,0,0.06);}
+input.message{flex:1;padding:10px;border-radius:10px;border:1px solid #d6dbe0;font-size:14px;}
+button.send{padding:10px 12px;border-radius:10px;border:0;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;}
+#settingsModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;}
+#settingsContent{background:var(--card);padding:20px;border-radius:12px;width:90%;max-width:400px;display:flex;flex-direction:column;gap:10px;}
+button#logoutBtn{margin-top:10px;}
+</style>
+
+<body data-theme="light">
+<div class="stage">
+<div id="app">
+  <aside id="sidebar">
+    <h3>Chats</h3>
+    <div id="roomsContainer"></div>
+    <button id="settingsBtn" class="room-btn">⚙️ Settings</button>
+  </aside>
+
+  <main id="main">
+    <header>
+      <div id="roomTitle">—</div>
+    </header>
+    <section id="chat"></section>
+    <footer>
+      <input id="msgInput" class="message" placeholder="Type a message…">
+      <button id="sendBtn" class="send">Send</button>
+    </footer>
+  </main>
+</div>
+</div>
+
+<div id="settingsModal">
+  <div id="settingsContent">
+    <h3>Settings</h3>
+    <button id="themeToggle">Toggle Theme</button>
+    <button id="logoutBtn">Logout</button>
+    <button id="closeSettings">Close</button>
+  </div>
+</div>
+</body>
+</html>
