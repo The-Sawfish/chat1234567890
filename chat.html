@@ -33,52 +33,39 @@ const settingsModal = document.getElementById("settingsModal");
 const closeSettings = document.getElementById("closeSettings");
 const themeToggle = document.getElementById("themeToggle");
 const logoutBtn = document.getElementById("logoutBtn");
-const newChatBtn = document.getElementById("newChatBtn");
 
 let currentUser = null;
-let currentRoom = null;
-let rooms = {}; // {roomId: {label, members}}
-let unsubscribeRoom = null;
+let currentRoom = "global";
+const rooms = { global: "🌍 Global Chat" };
+let roomConnections = {}; // For group chats or private peers
+let unreadCount = {};
 
-// Show UI after login
+// Hide chat UI until login verified
 document.getElementById("main").style.display = "none";
 document.getElementById("sidebar").style.display = "none";
 
-// ---- AUTH ----
+// ---- AUTH ENFORCEMENT ----
+let redirecting = false;
 onAuthStateChanged(auth, async (user) => {
-  if(!user) return;
-  currentUser = user;
-  document.getElementById("main").style.display = "flex";
-  document.getElementById("sidebar").style.display = "flex";
-  msgInput.disabled = false;
-  sendBtn.disabled = false;
-  await loadRooms();
-  loadTheme();
-  requestPermissionNotification();
+  if(!user) {
+    if(!redirecting){ redirecting = true; window.location.href = "login.html"; }
+  } else {
+    currentUser = user;
+    document.getElementById("main").style.display = "flex";
+    document.getElementById("sidebar").style.display = "flex";
+    loadRooms();
+    loadRoom("global");
+    loadTheme();
+    requestPermissionNotification();
+  }
 });
 
-// ---- LOAD ROOMS (global + private/group) ----
-async function loadRooms(){
+// ---- LOAD ROOMS ----
+function loadRooms(){
   roomsContainer.innerHTML = "";
-  rooms = {};
-
-  // Global chat
-  rooms["global"] = {label:"🌍 Global Chat", members:[]};
-
-  // Load user's private/group chats
-  const roomsSnap = await getDoc(doc(db,"userRooms",currentUser.uid));
-  if(roomsSnap.exists()){
-    const userRooms = roomsSnap.data();
-    for(const [id,data] of Object.entries(userRooms)){
-      rooms[id] = {label:data.label,members:data.members || []};
-    }
+  for(const [id,label] of Object.entries(rooms)){
+    addRoomButton(id,label);
   }
-
-  for(const [id,data] of Object.entries(rooms)){
-    addRoomButton(id,data.label);
-  }
-
-  if(!currentRoom) loadRoom(Object.keys(rooms)[0]);
 }
 
 // ---- ADD ROOM BUTTON ----
@@ -93,13 +80,11 @@ function addRoomButton(id,label){
 // ---- LOAD ROOM ----
 function loadRoom(roomId){
   currentRoom = roomId;
-  roomTitle.innerText = rooms[roomId]?.label || roomId;
+  roomTitle.innerText = rooms[roomId] || roomId;
   chatEl.innerHTML = "";
 
-  if(unsubscribeRoom) unsubscribeRoom();
-
   const q = query(collection(db,"rooms",roomId,"messages"), orderBy("createdAt"));
-  unsubscribeRoom = onSnapshot(q, snapshot => {
+  onSnapshot(q, snapshot => {
     chatEl.innerHTML = "";
     snapshot.forEach(docSnap => {
       const msg = docSnap.data();
@@ -107,51 +92,32 @@ function loadRoom(roomId){
     });
     chatEl.scrollTop = chatEl.scrollHeight;
   });
-
-  // Highlight active room button
-  document.querySelectorAll(".room-btn").forEach(b => b.classList.remove("active"));
-  const activeBtn = Array.from(document.querySelectorAll(".room-btn")).find(b => b.innerText===rooms[roomId].label);
-  if(activeBtn) activeBtn.classList.add("active");
-}
-
-// ---- SEND MESSAGE ----
-sendBtn.onclick = async () => {
-  const text = msgInput.value.trim();
-  if(!text || !currentRoom) return;
-  await addDoc(collection(db,"rooms",currentRoom,"messages"),{
-    text,
-    from: currentUser.uid,
-    createdAt: serverTimestamp()
-  });
-  msgInput.value = "";
 }
 
 // ---- APPEND MESSAGE ----
 function appendMessage(msg){
   const div = document.createElement("div");
-  div.className = "msg " + (msg.from === currentUser.uid ? "self" : "other");
+  div.className = "msg " + (msg.from === currentUser.email ? "self" : "other");
   div.innerHTML = `<div>${msg.text}</div>
-                   <div class="meta">${msg.from} • ${msg.createdAt?.toDate?.()?.toLocaleTimeString() || ""}</div>`;
+                   <div class="meta">${msg.from} • ${msg.createdAt?.toDate().toLocaleTimeString() || ""}</div>`;
   chatEl.appendChild(div);
 
-  if(msg.from !== currentUser.uid && Notification.permission === "granted"){
-    new Notification("New message", {body: msg.text});
+  // Push Notification if new message from other user
+  if(msg.from !== currentUser.email && Notification.permission === "granted"){
+    new Notification(`New message from ${msg.from}`, {body: msg.text});
   }
 }
 
-// ---- CREATE PRIVATE/GROUP CHAT ----
-async function createChat(userIds,label){
-  const allIds = [currentUser.uid,...userIds].sort();
-  const roomId = `chat_${allIds.join("_")}`;
-  rooms[roomId] = {label,members:allIds};
-
-  // Save room for each member
-  for(const uid of allIds){
-    await setDoc(doc(db,"userRooms",uid), {[roomId]:{label,members:allIds}}, {merge:true});
-  }
-
-  addRoomButton(roomId,label);
-  loadRoom(roomId);
+// ---- SEND MESSAGE ----
+sendBtn.onclick = async () => {
+  const text = msgInput.value.trim();
+  if(!text) return;
+  await addDoc(collection(db,"rooms",currentRoom,"messages"),{
+    text,
+    from: currentUser.email,
+    createdAt: serverTimestamp()
+  });
+  msgInput.value = "";
 }
 
 // ---- SETTINGS ----
@@ -165,30 +131,21 @@ themeToggle.onclick = ()=>{
 };
 logoutBtn.onclick = ()=> signOut(auth);
 
-// ---- NEW CHAT BUTTON ----
-newChatBtn.onclick = async () => {
-  const emails = prompt("Enter comma-separated emails for the chat (other users):");
-  if(!emails) return;
-  const label = prompt("Enter a chat name:");
-  if(!label) return;
-
-  // Convert emails to UID (simple version)
-  const userIds = emails.split(",").map(e=>e.trim()); // Replace with real UID lookup in production
-  createChat(userIds,label);
-}
-
-// ---- LOAD THEME ----
+// ---- LOAD SAVED THEME ----
 function loadTheme(){
   const saved = localStorage.getItem("theme") || "light";
   document.body.dataset.theme = saved;
 }
 
-// ---- NOTIFICATIONS ----
+// ---- PUSH NOTIFICATION PERMISSION ----
 function requestPermissionNotification(){
-  if("Notification" in window && Notification.permission==="default"){
-    Notification.requestPermission();
+  if("Notification" in window){
+    if(Notification.permission==="default"){
+      Notification.requestPermission();
+    }
   }
 }
+
 </script>
 
 <style>
@@ -203,7 +160,7 @@ function requestPermissionNotification(){
 html,body{margin:0;height:100%;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--text);}
 .stage{display:flex;justify-content:center;align-items:center;height:100vh;padding:10px;box-sizing:border-box;}
 #app{display:flex;width:95%;max-width:1000px;height:85vh;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.1);}
-#sidebar{width:250px;background:var(--sidebar);color:#fff;padding:12px;display:flex;flex-direction:column;}
+#sidebar{width:220px;background:var(--sidebar);color:#fff;padding:12px;display:flex;flex-direction:column;}
 #sidebar h3{margin:0 0 12px;text-align:center;font-size:16px;}
 .room-btn{display:flex;align-items:center;justify-content:center;padding:8px;border-radius:8px;border:0;background:transparent;color:#fff;margin:6px 0;cursor:pointer;font-weight:600;}
 .room-btn.active{background:var(--sidebar-active);}
@@ -216,10 +173,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:10p
 .meta{font-size:11px;color:rgba(0,0,0,0.45);margin-top:4px;}
 footer{display:flex;gap:8px;padding:10px;background:transparent;border-top:1px solid rgba(0,0,0,0.06);}
 input.message{flex:1;padding:10px;border-radius:10px;border:1px solid #d6dbe0;font-size:14px;}
-button.send, button#newChatBtn{padding:10px 12px;border-radius:10px;border:0;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;}
+button.send{padding:10px 12px;border-radius:10px;border:0;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;}
 #settingsModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;}
-#settingsContent{background:var(--card);padding:20px;border-radius:12px;width:90%;max-width:400px;display:flex;flex-direction:column;}
-button#logoutBtn, button#closeSettings, button#themeToggle{margin-top:10px;}
+#settingsContent{background:var(--card);padding:20px;border-radius:12px;width:90%;max-width:400px;}
+button#logoutBtn{margin-top:10px;}
 </style>
 
 <body data-theme="light">
@@ -228,7 +185,6 @@ button#logoutBtn, button#closeSettings, button#themeToggle{margin-top:10px;}
   <aside id="sidebar">
     <h3>Chats</h3>
     <div id="roomsContainer"></div>
-    <button id="newChatBtn" class="room-btn">➕ New Chat</button>
     <button id="settingsBtn" class="room-btn">⚙️ Settings</button>
   </aside>
 
@@ -238,8 +194,8 @@ button#logoutBtn, button#closeSettings, button#themeToggle{margin-top:10px;}
     </header>
     <section id="chat"></section>
     <footer>
-      <input id="msgInput" class="message" placeholder="Type a message…">
-      <button id="sendBtn" class="send">Send</button>
+      <input id="msgInput" class="message" placeholder="Type a message…" disabled>
+      <button id="sendBtn" class="send" disabled>Send</button>
     </footer>
   </main>
 </div>
