@@ -1,35 +1,13 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
+<meta charset="UTF-8">
 <title>Hybrid Chat — Sign Up</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<style>
-  :root{--bg:#f5f7fa;--card:#fff;--accent:#3498db;--text:#222}
-  body{margin:0;height:100vh;background:var(--bg);font-family:Inter,Arial,sans-serif;color:var(--text);display:flex;align-items:center;justify-content:center}
-  .card{width:340px;background:var(--card);padding:20px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.08)}
-  h2{text-align:center;margin:0 0 12px}
-  input,button,select{width:100%;padding:10px;margin:8px 0;border-radius:8px;border:1px solid #ddd;box-sizing:border-box}
-  button{background:var(--accent);color:#fff;border:0;font-weight:700;cursor:pointer}
-  .small{background:transparent;border:0;color:var(--accent);cursor:pointer;text-align:center;margin-top:6px}
-</style>
-</head>
-<body>
-<div class="card">
-  <h2>Create account</h2>
-  <input id="displayName" placeholder="Username (unique)"/>
-  <input id="email" type="email" placeholder="Email"/>
-  <input id="password" type="password" placeholder="Password (6+ chars)"/>
-  <button id="signupBtn">Sign up</button>
-  <button id="toLogin" class="small">Already have an account? Log in</button>
-  <p style="font-size:12px;color:#666;margin-top:6px">Theme will follow your preference from chat (if set).</p>
-  <div id="msg" style="font-size:13px;color:#c0392b"></div>
-</div>
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
-import { getFirestore, collection, query, where, getDocs, setDoc, doc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { getFirestore, collection, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
@@ -43,41 +21,73 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const displayNameEl = document.getElementById('displayName');
-const emailEl = document.getElementById('email');
-const passEl = document.getElementById('password');
-const signupBtn = document.getElementById('signupBtn');
-const msgEl = document.getElementById('msg');
+document.addEventListener("DOMContentLoaded", () => {
+  const emailInput = document.getElementById("email");
+  const usernameInput = document.getElementById("username");
+  const passInput = document.getElementById("password");
+  const signupBtn = document.getElementById("signupBtn");
+  const errorMsg = document.getElementById("errorMsg");
 
-signupBtn.onclick = async () => {
-  msgEl.textContent = '';
-  const username = (displayNameEl.value||'').trim();
-  const email = (emailEl.value||'').trim();
-  const password = passEl.value||'';
-  if(!username) return msgEl.textContent='Enter a username';
-  if(!email) return msgEl.textContent='Enter an email';
-  if(password.length < 6) return msgEl.textContent='Password must be 6+ chars';
+  signupBtn.onclick = async () => {
+    const email = emailInput.value.trim();
+    const password = passInput.value.trim();
+    const username = usernameInput.value.trim();
+    errorMsg.innerText = "";
 
-  // ensure unique username
-  const q = query(collection(db,'users'), where('username','==',username));
-  const snap = await getDocs(q);
-  if(!snap.empty) return msgEl.textContent = 'Username already taken';
+    if (!email || !password || !username) {
+      errorMsg.innerText = "All fields are required.";
+      return;
+    }
 
-  try {
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    // store username in users/{uid}
-    await setDoc(doc(db,'users',cred.user.uid), { username, email });
-    window.location.href = 'chat.html';
-  } catch(e){
-    msgEl.textContent = e.message || 'Signup error';
-  }
-};
+    try {
+      // Check if username already exists
+      const usernameDoc = await getDoc(doc(db, "usernames", username));
+      if (usernameDoc.exists()) {
+        errorMsg.innerText = "Username already taken.";
+        return;
+      }
 
-document.getElementById('toLogin').onclick = ()=> location.href='login.html';
+      // Create user with email/password
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
 
-// apply theme saved in localStorage (if any) for visual consistency
-const saved = localStorage.getItem('theme');
-if(saved) document.body.setAttribute('data-theme', saved);
+      // Save username mapping in Firestore
+      await setDoc(doc(db, "usernames", username), {
+        uid: userCredential.user.uid,
+        email
+      });
+
+      // Redirect to chat
+      window.location.href = "chat.html";
+    } catch (err) {
+      errorMsg.innerText = err.message;
+    }
+  };
+
+  document.getElementById("loginLink").onclick = () => {
+    window.location.href = "login.html";
+  };
+});
 </script>
+<style>
+body {font-family: Arial, sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; background:#f5f5f5;}
+.container {background:#fff; padding:30px; border-radius:12px; box-shadow:0 8px 20px rgba(0,0,0,0.1); width:300px; text-align:center;}
+input {width:100%; padding:10px; margin:10px 0; border-radius:8px; border:1px solid #ccc; box-sizing:border-box;}
+button {width:100%; padding:10px; border:none; border-radius:8px; background:#2ecc71; color:#fff; font-weight:700; cursor:pointer;}
+button:hover {background:#27ae60;}
+#loginLink {margin-top:12px; display:block; color:#3498db; cursor:pointer; text-decoration:underline;}
+#errorMsg {color:red; font-size:13px; margin-top:8px;}
+h2 {margin-bottom:20px;}
+</style>
+</head>
+<body>
+  <div class="container">
+    <h2>Sign Up</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Password">
+    <button id="signupBtn">Sign Up</button>
+    <div id="errorMsg"></div>
+    <span id="loginLink">Already have an account? Log In</span>
+  </div>
 </body>
 </html>
