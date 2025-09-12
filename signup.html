@@ -1,39 +1,83 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Signup - Chat</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8" />
+<title>Hybrid Chat — Sign Up</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
-body{margin:0;font-family:Arial,sans-serif;background:#f0f2f5;display:flex;justify-content:center;align-items:center;height:100vh;}
-.container{background:white;padding:30px;border-radius:12px;width:90%;max-width:400px;box-shadow:0 6px 20px rgba(0,0,0,0.08);text-align:center;}
-input{width:90%;padding:10px;margin:10px 0;border-radius:6px;border:1px solid #ccc;}
-button{padding:10px 20px;border-radius:6px;border:none;background:#4a90e2;color:white;font-weight:bold;cursor:pointer;}
+  :root{--bg:#f5f7fa;--card:#fff;--accent:#3498db;--text:#222}
+  body{margin:0;height:100vh;background:var(--bg);font-family:Inter,Arial,sans-serif;color:var(--text);display:flex;align-items:center;justify-content:center}
+  .card{width:340px;background:var(--card);padding:20px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.08)}
+  h2{text-align:center;margin:0 0 12px}
+  input,button,select{width:100%;padding:10px;margin:8px 0;border-radius:8px;border:1px solid #ddd;box-sizing:border-box}
+  button{background:var(--accent);color:#fff;border:0;font-weight:700;cursor:pointer}
+  .small{background:transparent;border:0;color:var(--accent);cursor:pointer;text-align:center;margin-top:6px}
 </style>
 </head>
 <body>
-<div class="container">
-<h2>Create Account</h2>
-<input type="text" id="username" placeholder="Username">
-<input type="password" id="password" placeholder="Password">
-<br>
-<button id="signupBtn">Signup</button>
-<br><br>
-<a href="login.html">Already have an account? Login</a>
+<div class="card">
+  <h2>Create account</h2>
+  <input id="displayName" placeholder="Username (unique)"/>
+  <input id="email" type="email" placeholder="Email"/>
+  <input id="password" type="password" placeholder="Password (6+ chars)"/>
+  <button id="signupBtn">Sign up</button>
+  <button id="toLogin" class="small">Already have an account? Log in</button>
+  <p style="font-size:12px;color:#666;margin-top:6px">Theme will follow your preference from chat (if set).</p>
+  <div id="msg" style="font-size:13px;color:#c0392b"></div>
 </div>
 
-<script>
-document.getElementById('signupBtn').onclick = ()=>{
-  const username=document.getElementById('username').value.trim();
-  const password=document.getElementById('password').value.trim();
-  if(!username||!password){alert('Enter username and password');return;}
-  let users=JSON.parse(localStorage.getItem('users')||'{}');
-  if(users[username]){alert('Username already exists');return;}
-  users[username]=password;
-  localStorage.setItem('users',JSON.stringify(users));
-  alert('Signup successful! Please login.');
-  window.location.href='login.html';
-}
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, setDoc, doc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
+  authDomain: "hybridchat-8a96c.firebaseapp.com",
+  projectId: "hybridchat-8a96c",
+  storageBucket: "hybridchat-8a96c.firebasestorage.app",
+  messagingSenderId: "8350065462",
+  appId: "1:8350065462:web:779c8fd3c81acaeebc8997"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const displayNameEl = document.getElementById('displayName');
+const emailEl = document.getElementById('email');
+const passEl = document.getElementById('password');
+const signupBtn = document.getElementById('signupBtn');
+const msgEl = document.getElementById('msg');
+
+signupBtn.onclick = async () => {
+  msgEl.textContent = '';
+  const username = (displayNameEl.value||'').trim();
+  const email = (emailEl.value||'').trim();
+  const password = passEl.value||'';
+  if(!username) return msgEl.textContent='Enter a username';
+  if(!email) return msgEl.textContent='Enter an email';
+  if(password.length < 6) return msgEl.textContent='Password must be 6+ chars';
+
+  // ensure unique username
+  const q = query(collection(db,'users'), where('username','==',username));
+  const snap = await getDocs(q);
+  if(!snap.empty) return msgEl.textContent = 'Username already taken';
+
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    // store username in users/{uid}
+    await setDoc(doc(db,'users',cred.user.uid), { username, email });
+    window.location.href = 'chat.html';
+  } catch(e){
+    msgEl.textContent = e.message || 'Signup error';
+  }
+};
+
+document.getElementById('toLogin').onclick = ()=> location.href='login.html';
+
+// apply theme saved in localStorage (if any) for visual consistency
+const saved = localStorage.getItem('theme');
+if(saved) document.body.setAttribute('data-theme', saved);
 </script>
 </body>
 </html>
