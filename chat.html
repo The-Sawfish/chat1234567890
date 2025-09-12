@@ -3,33 +3,33 @@
 <head>
 <meta charset="UTF-8">
 <title>Hybrid Chat</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  :root { --bg:#f5f7fa; --sidebar:#2c3e50; --sidebar-active:#34495e; --accent:#3498db;
-          --text:#222; --card:#fff; --self:#2ecc71; --other:#bdc3c7; }
-  [data-theme="dark"]{ --bg:#0f1112; --sidebar:#16202b; --sidebar-active:#25343e; --accent:#256aa2;
-          --text:#eaeef0; --card:#151718; --self:#27ae60; --other:#4b5563; }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter, Arial,sans-serif;}
-  .stage{display:flex;justify-content:center;align-items:center;height:100vh;padding:12px;}
-  #app{display:flex;width:95%;max-width:1000px;height:84vh;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(2,6,23,.12);}
-  #sidebar{width:220px;background:var(--sidebar);color:#fff;padding:12px;display:flex;flex-direction:column;}
-  #sidebar h3{margin:0 0 12px;text-align:center;font-size:16px;}
-  .room-btn{display:flex;align-items:center;justify-content:center;padding:8px;border-radius:8px;border:0;background:transparent;color:#fff;margin:6px 0;cursor:pointer;font-weight:600;}
-  .room-btn.active{background:var(--sidebar-active);}
-  #main{flex:1;display:flex;flex-direction:column;background:var(--card);}
-  header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--accent);color:#fff;}
-  #chat{flex:1;overflow:auto;padding:14px;background:linear-gradient(180deg, rgba(0,0,0,0.02), transparent);}
-  .msg{clear:both;max-width:72%;padding:10px 12px;border-radius:12px;margin:8px 0;word-break:break-word;}
-  .self{background:var(--self);color:#fff;float:right;border-bottom-right-radius:4px;}
-  .other{background:var(--other);float:left;color:#111;border-bottom-left-radius:4px;}
-  .meta{font-size:11px;color:rgba(0,0,0,0.45);margin-top:6px;}
-  footer{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(0,0,0,0.06);}
-  input.message{flex:1;padding:10px;border-radius:10px;border:1px solid #d6dbe0;font-size:14px;}
-  button.send{padding:10px 12px;border-radius:10px;border:0;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;}
-  #settingsModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);align-items:center;justify-content:center;}
-  #settingsContent{background:var(--card);padding:20px;border-radius:12px;min-width:280px;color:var(--text);}
-  select{width:100%;padding:8px;margin:10px 0;border-radius:8px;border:1px solid #ccc;}
-  button.closeSettings{margin-top:10px;background:#e74c3c;color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;}
+:root { --bg:#f5f7fa; --sidebar:#2c3e50; --sidebar-active:#34495e; --accent:#3498db;
+        --text:#222; --card:#fff; --self:#2ecc71; --other:#bdc3c7; }
+[data-theme="dark"]{ --bg:#0f1112; --sidebar:#16202b; --sidebar-active:#25343e; --accent:#256aa2;
+        --text:#eaeef0; --card:#151718; --self:#27ae60; --other:#4b5563; }
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,Arial,sans-serif;}
+.stage{display:flex;justify-content:center;align-items:center;height:100vh;padding:12px;}
+#app{display:flex;width:95%;max-width:1000px;height:84vh;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(2,6,23,.12);}
+#sidebar{width:220px;background:var(--sidebar);color:#fff;padding:12px;display:flex;flex-direction:column;}
+#sidebar h3{margin:0 0 12px;text-align:center;font-size:16px;}
+.room-btn{display:flex;align-items:center;justify-content:center;padding:8px;border-radius:8px;border:0;background:transparent;color:#fff;margin:6px 0;cursor:pointer;font-weight:600;}
+.room-btn.active{background:var(--sidebar-active);}
+#main{flex:1;display:flex;flex-direction:column;background:var(--card);}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--accent);color:#fff;}
+#chat{flex:1;overflow:auto;padding:14px;background:linear-gradient(180deg, rgba(0,0,0,0.02), transparent);}
+.msg{clear:both;max-width:72%;padding:10px 12px;border-radius:12px;margin:8px 0;word-break:break-word;}
+.self{background:var(--self);color:#fff;float:right;border-bottom-right-radius:4px;}
+.other{background:var(--other);float:left;color:#111;border-bottom-left-radius:4px;}
+.meta{font-size:11px;color:rgba(0,0,0,0.45);margin-top:6px;}
+footer{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(0,0,0,0.06);}
+input.message{flex:1;padding:10px;border-radius:10px;border:1px solid #d6dbe0;font-size:14px;}
+button.send{padding:10px 12px;border-radius:10px;border:0;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;}
+#settingsModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);align-items:center;justify-content:center;}
+#settingsContent{background:var(--card);padding:20px;border-radius:12px;min-width:280px;color:var(--text);}
+select{width:100%;padding:8px;margin:10px 0;border-radius:8px;border:1px solid #ccc;}
+button.closeSettings{margin-top:10px;background:#e74c3c;color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;}
 </style>
 </head>
 <body data-theme="light">
@@ -38,7 +38,7 @@
     <aside id="sidebar">
       <h3>Chats</h3>
       <div id="roomsContainer"></div>
-      <button id="newChatBtn" class="room-btn">+ Private / Group</button>
+      <button id="newChatBtn" class="room-btn">+ Find User / Group</button>
       <button id="settingsBtn" class="room-btn">⚙️ Settings</button>
     </aside>
     <main id="main">
@@ -71,7 +71,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -90,6 +90,7 @@ const db = getFirestore(app);
 let currentUser = null;
 let currentRoom = "Global";
 const rooms = { Global: "🌍 Global" };
+
 const roomsContainer = document.getElementById("roomsContainer");
 const chatEl = document.getElementById("chat");
 const msgInput = document.getElementById("msgInput");
@@ -100,15 +101,13 @@ const closeSettings = document.getElementById("closeSettings");
 const themeSelect = document.getElementById("themeSelect");
 const newChatBtn = document.getElementById("newChatBtn");
 
-// --- Login ---
-onAuthStateChanged(auth, user => {
-  if(!user) window.location.href="login.html";
-  else {
-    currentUser = { email: user.email, username: user.displayName || user.email.split("@")[0] };
-    renderRooms();
-    switchRoom("Global");
-    requestNotificationPermission();
-  }
+// --- Require login ---
+onAuthStateChanged(auth, user=>{
+  if(!user){ window.location.href="login.html"; return; }
+  currentUser = { username: user.displayName || user.email.split("@")[0] };
+  renderRooms();
+  switchRoom("Global");
+  requestNotificationPermission();
 });
 
 // --- Render Rooms ---
@@ -129,7 +128,7 @@ function switchRoom(roomId){
   renderRooms();
   chatEl.innerHTML="";
   const q=query(collection(db,"rooms",roomId,"messages"),orderBy("createdAt"));
-  onSnapshot(q, snap=>{
+  onSnapshot(q,snap=>{
     chatEl.innerHTML="";
     snap.forEach(docSnap=>{
       const msg=docSnap.data();
@@ -147,7 +146,7 @@ function switchRoom(roomId){
 
 // --- Send Message ---
 sendBtn.onclick=async ()=>{
-  const text = msgInput.value.trim();
+  const text=msgInput.value.trim();
   if(!text) return;
   await addDoc(collection(db,"rooms",currentRoom,"messages"),{
     text,
@@ -166,23 +165,22 @@ themeSelect.onchange=()=>{
   localStorage.setItem("theme",themeSelect.value);
 };
 const savedTheme=localStorage.getItem("theme");
-if(savedTheme){document.body.dataset.theme=savedTheme; themeSelect.value=savedTheme;}
+if(savedTheme){ document.body.dataset.theme=savedTheme; themeSelect.value=savedTheme; }
 
-// --- Notification ---
+// --- Notifications ---
 function requestNotificationPermission(){
-  if("Notification" in window && Notification.permission==="default")
-    Notification.requestPermission();
+  if("Notification" in window && Notification.permission==="default") Notification.requestPermission();
 }
 
-// --- Private / Group Chat ---
-newChatBtn.onclick=async ()=>{
-  const usernames = prompt("Enter usernames (max 5 others) separated by commas:");
-  if(!usernames) return;
-  const userArr = [...new Set(usernames.split(",").map(u=>u.trim()).filter(u=>u && u!==currentUser.username))];
-  if(userArr.length>5){alert("Max 5 users allowed"); return;}
-  userArr.push(currentUser.username);
-  const roomId = userArr.sort().join("_");
-  rooms[roomId] = "Group: " + userArr.join(", ");
+// --- Find User / Group Chat ---
+newChatBtn.onclick=()=>{
+  const input = prompt("Enter usernames (comma-separated, max 5 others):");
+  if(!input) return;
+  const userList = [...new Set(input.split(",").map(u=>u.trim()).filter(u=>u && u!==currentUser.username))];
+  if(userList.length>5){ alert("Maximum 5 users allowed"); return; }
+  userList.push(currentUser.username);
+  const roomId = userList.sort().join("_");
+  rooms[roomId] = "Chat: " + userList.join(", ");
   renderRooms();
   switchRoom(roomId);
 };
