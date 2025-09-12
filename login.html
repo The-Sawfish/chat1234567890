@@ -1,31 +1,33 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <title>Hybrid Chat — Login</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
-  body { font-family: Inter, Arial; background:#f5f7fa; display:flex; justify-content:center; align-items:center; height:100vh; }
-  #authBox { background:#fff; padding:20px; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,.15); width:300px; }
-  input, button { width:100%; padding:10px; margin:8px 0; border-radius:8px; border:1px solid #ddd; }
-  button { background:#3498db; color:#fff; font-weight:bold; border:none; cursor:pointer; }
-  button:hover { background:#2980b9; }
+  :root{--bg:#f5f7fa;--card:#fff;--accent:#3498db;--text:#222}
+  body{margin:0;height:100vh;background:var(--bg);font-family:Inter,Arial,sans-serif;color:var(--text);display:flex;align-items:center;justify-content:center}
+  .card{width:320px;background:var(--card);padding:20px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.08)}
+  h2{text-align:center;margin:0 0 12px}
+  input,button{width:100%;padding:10px;margin:8px 0;border-radius:8px;border:1px solid #ddd;box-sizing:border-box}
+  button{background:var(--accent);color:#fff;border:0;font-weight:700;cursor:pointer}
+  .small{background:transparent;border:0;color:var(--accent);cursor:pointer;text-align:center;margin-top:6px}
 </style>
 </head>
 <body>
-<div id="authBox">
-  <h2>Hybrid Chat Login</h2>
-  <input type="email" id="email" placeholder="Email" />
-  <input type="password" id="password" placeholder="Password" />
-  <input type="text" id="username" placeholder="Username (for Sign Up)" />
-  <button id="loginBtn">Login</button>
-  <button id="signupBtn">Sign Up</button>
+<div class="card">
+  <h2>Log in</h2>
+  <input id="email" type="email" placeholder="Email"/>
+  <input id="password" type="password" placeholder="Password"/>
+  <button id="loginBtn">Log in</button>
+  <button id="toSignup" class="small">Create an account</button>
+  <div id="msg" style="font-size:13px;color:#c0392b"></div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
@@ -39,34 +41,22 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-document.getElementById("loginBtn").onclick = async () => {
-  const email = document.getElementById("email").value;
-  const pass = document.getElementById("password").value;
-  try {
-    await signInWithEmailAndPassword(auth, email, pass);
-    window.location.href = "chat.html";
-  } catch (err) {
-    alert("Login failed: " + err.message);
-  }
+const emailEl = document.getElementById('email');
+const passEl = document.getElementById('password');
+const msgEl = document.getElementById('msg');
+
+document.getElementById('loginBtn').onclick = async () => {
+  msgEl.textContent = '';
+  try{
+    await signInWithEmailAndPassword(auth, emailEl.value.trim(), passEl.value||'');
+    window.location.href = 'chat.html';
+  } catch(e){ msgEl.textContent = e.message || 'Login failed'; }
 };
 
-document.getElementById("signupBtn").onclick = async () => {
-  const email = document.getElementById("email").value;
-  const pass = document.getElementById("password").value;
-  const username = document.getElementById("username").value.trim();
-  if (!username) {
-    alert("Please enter a username");
-    return;
-  }
-  try {
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
-    // Save username tied to UID
-    await setDoc(doc(db, "users", cred.user.uid), { username });
-    window.location.href = "chat.html";
-  } catch (err) {
-    alert("Signup failed: " + err.message);
-  }
-};
+document.getElementById('toSignup').onclick = ()=> location.href='signup.html';
+
+const saved = localStorage.getItem('theme');
+if(saved) document.body.setAttribute('data-theme', saved);
 </script>
 </body>
 </html>
