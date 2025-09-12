@@ -1,37 +1,62 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Login - Chat</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8" />
+<title>Hybrid Chat — Login</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
-body{margin:0;font-family:Arial,sans-serif;background:#f0f2f5;display:flex;justify-content:center;align-items:center;height:100vh;}
-.container{background:white;padding:30px;border-radius:12px;width:90%;max-width:400px;box-shadow:0 6px 20px rgba(0,0,0,0.08);text-align:center;}
-input{width:90%;padding:10px;margin:10px 0;border-radius:6px;border:1px solid #ccc;}
-button{padding:10px 20px;border-radius:6px;border:none;background:#4a90e2;color:white;font-weight:bold;cursor:pointer;}
+  body { font-family: Inter, Arial; background:#f5f7fa; display:flex; justify-content:center; align-items:center; height:100vh; }
+  #authBox { background:#fff; padding:20px; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,.15); width:300px; }
+  input, button { width:100%; padding:10px; margin:8px 0; border-radius:8px; border:1px solid #ddd; }
+  button { background:#3498db; color:#fff; font-weight:bold; border:none; cursor:pointer; }
+  button:hover { background:#2980b9; }
 </style>
 </head>
 <body>
-<div class="container">
-<h2>Login</h2>
-<input type="text" id="username" placeholder="Username">
-<input type="password" id="password" placeholder="Password">
-<br>
-<button id="loginBtn">Login</button>
-<br><br>
-<a href="signup.html">Create Account</a>
+<div id="authBox">
+  <h2>Hybrid Chat Login</h2>
+  <input type="email" id="email" placeholder="Email" />
+  <input type="password" id="password" placeholder="Password" />
+  <button id="loginBtn">Login</button>
+  <button id="signupBtn">Sign Up</button>
 </div>
 
-<script>
-document.getElementById('loginBtn').onclick=()=>{
-  const username=document.getElementById('username').value.trim();
-  const password=document.getElementById('password').value.trim();
-  if(!username||!password){alert('Enter username and password');return;}
-  let users=JSON.parse(localStorage.getItem('users')||'{}');
-  if(users[username]!==password){alert('Invalid username or password');return;}
-  sessionStorage.setItem('username',username);
-  window.location.href='chat.html';
-}
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
+  authDomain: "hybridchat-8a96c.firebaseapp.com",
+  projectId: "hybridchat-8a96c",
+  storageBucket: "hybridchat-8a96c.firebasestorage.app",
+  messagingSenderId: "8350065462",
+  appId: "1:8350065462:web:779c8fd3c81acaeebc8997"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+document.getElementById("loginBtn").onclick = async () => {
+  const email = document.getElementById("email").value;
+  const pass = document.getElementById("password").value;
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+    window.location.href = "chat.html";
+  } catch (err) {
+    alert("Login failed: " + err.message);
+  }
+};
+
+document.getElementById("signupBtn").onclick = async () => {
+  const email = document.getElementById("email").value;
+  const pass = document.getElementById("password").value;
+  try {
+    await createUserWithEmailAndPassword(auth, email, pass);
+    window.location.href = "chat.html";
+  } catch (err) {
+    alert("Signup failed: " + err.message);
+  }
+};
 </script>
 </body>
 </html>
