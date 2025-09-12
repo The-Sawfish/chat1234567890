@@ -10,17 +10,25 @@
     --bg:#f5f7fa; --sidebar:#2c3e50; --sidebar-active:#34495e; --accent:#3498db;
     --text:#222; --card:#fff; --self:#2ecc71; --other:#bdc3c7;
   }
-  [data-theme="dark"] {
+  [data-theme="dark"]{
     --bg:#0f1112; --sidebar:#16202b; --sidebar-active:#25343e; --accent:#256aa2;
     --text:#eaeef0; --card:#151718; --self:#27ae60; --other:#4b5563;
   }
-  [data-theme="sunset"] {
+  [data-theme="sunset"]{
     --bg:#ffebe6; --sidebar:#d35400; --sidebar-active:#e67e22; --accent:#e74c3c;
     --text:#2c3e50; --card:#fff3f0; --self:#e67e22; --other:#f39c12;
   }
-  [data-theme="forest"] {
+  [data-theme="forest"]{
     --bg:#eafbea; --sidebar:#14532d; --sidebar-active:#166534; --accent:#22c55e;
     --text:#1a1a1a; --card:#f0fff4; --self:#16a34a; --other:#bbf7d0;
+  }
+  [data-theme="ocean"]{
+    --bg:#e0f7fa; --sidebar:#006064; --sidebar-active:#00838f; --accent:#00acc1;
+    --text:#00363a; --card:#ffffff; --self:#0097a7; --other:#b2ebf2;
+  }
+  [data-theme="midnight"]{
+    --bg:#071124; --sidebar:#09203f; --sidebar-active:#0b3b5a; --accent:#375a7f;
+    --text:#e6f0fa; --card:#0b1420; --self:#2a9df4; --other:#1b2b44;
   }
 
   html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter, Arial, sans-serif}
@@ -29,7 +37,9 @@
   #sidebar{width:220px;background:var(--sidebar);color:#fff;padding:12px;box-sizing:border-box;display:flex;flex-direction:column}
   #sidebar h3{margin:0 0 12px;text-align:center;font-size:16px}
   .room-btn{display:flex;align-items:center;justify-content:space-between;padding:8px;border-radius:8px;border:0;background:transparent;color:#fff;margin:6px 0;cursor:pointer;font-weight:600}
+  .room-btn:hover{background:rgba(255,255,255,0.04)}
   .room-btn.active{background:var(--sidebar-active)}
+  .room-label{flex:1;text-align:left;padding-right:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .controls{margin-top:auto;display:flex;flex-direction:column;gap:8px}
   .btn-flat{background:var(--accent);border:0;color:#fff;padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:700}
   .small-flat{background:transparent;border:1px solid rgba(255,255,255,0.08);color:#fff;padding:6px 8px;border-radius:8px;cursor:pointer}
@@ -73,15 +83,26 @@
   </div>
 </div>
 
-<!-- Settings Modal -->
+<!-- Settings Modal: replaced with dropdown + improved close contrast -->
 <div id="settingsModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);align-items:center;justify-content:center;">
-  <div style="background:var(--card);padding:20px;border-radius:12px;min-width:280px;color:var(--text)">
-    <h3>⚙️ Settings</h3>
-    <button id="themeToggle" class="btn-flat" style="margin:10px 0">Toggle Dark/Light</button>
-    <button id="sunsetTheme" class="btn-flat" style="margin:10px 0;background:#e67e22">Sunset Theme</button>
-    <button id="forestTheme" class="btn-flat" style="margin:10px 0;background:#16a34a">Forest Theme</button>
-    <button id="logout" class="btn-flat" style="background:#e74c3c">Logout</button>
-    <button onclick="closeSettings()" class="small-flat" style="margin-top:10px">Close</button>
+  <div style="background:var(--card);padding:20px;border-radius:12px;min-width:320px;color:var(--text);box-shadow:0 8px 24px rgba(0,0,0,0.18)">
+    <h3 style="margin-top:0">⚙️ Settings</h3>
+
+    <label for="themeSelect" style="display:block;margin-top:8px;font-weight:600">Theme</label>
+    <select id="themeSelect" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;margin-top:8px;color:var(--text);background:var(--card)">
+      <option value="light">Light</option>
+      <option value="dark">Dark</option>
+      <option value="sunset">Sunset</option>
+      <option value="forest">Forest</option>
+      <option value="ocean">Ocean</option>
+      <option value="midnight">Midnight</option>
+    </select>
+
+    <div style="margin-top:14px;display:flex;gap:8px;flex-direction:column">
+      <button id="logout" class="btn-flat" style="background:#e74c3c">Logout</button>
+      <!-- Close button: ensure high contrast so it's always visible -->
+      <button id="closeSettings" class="btn-flat" style="background:var(--accent);color:#fff">Close</button>
+    </div>
   </div>
 </div>
 
@@ -165,40 +186,38 @@ msgInput.addEventListener("keydown",(e)=>{
   if(e.key==="Enter") sendBtn.click();
 });
 
-// settings modal
+// settings modal interactions
 document.getElementById("settings").onclick=()=>{
   document.getElementById("settingsModal").style.display="flex";
 };
+
+// logout
 document.getElementById("logout").onclick=()=>{
   sessionStorage.clear();
   location.href="login.html";
 };
-document.getElementById("themeToggle").onclick=()=>{
-  toggleTheme("dark","light");
-};
-document.getElementById("sunsetTheme").onclick=()=>{
-  document.body.setAttribute("data-theme","sunset");
-  localStorage.setItem("theme","sunset");
-};
-document.getElementById("forestTheme").onclick=()=>{
-  document.body.setAttribute("data-theme","forest");
-  localStorage.setItem("theme","forest");
-};
-function toggleTheme(a,b){
-  const cur=document.body.getAttribute("data-theme")||"light";
-  const next=cur===a?b:a;
-  document.body.setAttribute("data-theme",next);
-  localStorage.setItem("theme",next);
+
+// theme select handling (dropdown)
+const themeSelect = document.getElementById("themeSelect");
+themeSelect.addEventListener("change", (e) => {
+  const next = e.target.value;
+  document.body.setAttribute("data-theme", next);
+  localStorage.setItem("theme", next);
+});
+// set initial select value to saved theme
+const savedTheme = localStorage.getItem("theme");
+if(savedTheme) {
+  document.body.setAttribute("data-theme", savedTheme);
+  // try to set the select's value (if present)
+  try { themeSelect.value = savedTheme; } catch(e){}
 }
-function closeSettings(){
+
+// close settings (contrast-safe button)
+document.getElementById("closeSettings").onclick = ()=>{
   document.getElementById("settingsModal").style.display="none";
-}
-window.closeSettings=closeSettings;
+};
 
-const savedTheme=localStorage.getItem("theme");
-if(savedTheme) document.body.setAttribute("data-theme",savedTheme);
-
-// Notifications
+// Notifications (same behavior)
 if ("Notification" in window && Notification.permission !== "denied") {
   Notification.requestPermission();
 }
@@ -207,8 +226,8 @@ function showNotification(msg) {
     new Notification("New message from " + msg.user, { body: msg.text });
   }
 }
-const q=query(collection(db,"rooms",currentRoom,"messages"),orderBy("time"));
-onSnapshot(q,(snap)=>{
+const q2=query(collection(db,"rooms",currentRoom,"messages"),orderBy("time"));
+onSnapshot(q2,(snap)=>{
   snap.docChanges().forEach(change=>{
     if(change.type==="added"){
       showNotification(change.doc.data());
