@@ -5,19 +5,12 @@
 <title>Hybrid Chat</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-  :root {
-    --bg:#f5f7fa; --sidebar:#2c3e50; --sidebar-active:#34495e; --accent:#3498db;
-    --text:#222; --card:#fff; --self:#2ecc71; --other:#bdc3c7;
-  }
-  [data-theme="dark"]{
-    --bg:#0f1112; --sidebar:#16202b; --sidebar-active:#25343e; --accent:#256aa2;
-    --text:#eaeef0; --card:#151718; --self:#27ae60; --other:#4b5563;
-  }
-  [data-theme="red"]{ --accent:#e74c3c; --self:#c0392b; }
-  [data-theme="green"]{ --accent:#2ecc71; --self:#27ae60; }
-  [data-theme="purple"]{ --accent:#9b59b6; --self:#8e44ad; }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter, Arial, sans-serif;}
-  .stage{display:flex;justify-content:center;align-items:center;height:100vh;padding:12px;box-sizing:border-box;}
+  :root { --bg:#f5f7fa; --sidebar:#2c3e50; --sidebar-active:#34495e; --accent:#3498db;
+          --text:#222; --card:#fff; --self:#2ecc71; --other:#bdc3c7; }
+  [data-theme="dark"]{ --bg:#0f1112; --sidebar:#16202b; --sidebar-active:#25343e; --accent:#256aa2;
+          --text:#eaeef0; --card:#151718; --self:#27ae60; --other:#4b5563; }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter, Arial,sans-serif;}
+  .stage{display:flex;justify-content:center;align-items:center;height:100vh;padding:12px;}
   #app{display:flex;width:95%;max-width:1000px;height:84vh;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(2,6,23,.12);}
   #sidebar{width:220px;background:var(--sidebar);color:#fff;padding:12px;display:flex;flex-direction:column;}
   #sidebar h3{margin:0 0 12px;text-align:center;font-size:16px;}
@@ -25,12 +18,12 @@
   .room-btn.active{background:var(--sidebar-active);}
   #main{flex:1;display:flex;flex-direction:column;background:var(--card);}
   header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--accent);color:#fff;}
-  #chat{flex:1;overflow:auto;padding:14px;box-sizing:border-box;background:linear-gradient(180deg, rgba(0,0,0,0.02), transparent);}
+  #chat{flex:1;overflow:auto;padding:14px;background:linear-gradient(180deg, rgba(0,0,0,0.02), transparent);}
   .msg{clear:both;max-width:72%;padding:10px 12px;border-radius:12px;margin:8px 0;word-break:break-word;}
   .self{background:var(--self);color:#fff;float:right;border-bottom-right-radius:4px;}
   .other{background:var(--other);float:left;color:#111;border-bottom-left-radius:4px;}
   .meta{font-size:11px;color:rgba(0,0,0,0.45);margin-top:6px;}
-  footer{display:flex;gap:8px;padding:10px;background:transparent;border-top:1px solid rgba(0,0,0,0.06);}
+  footer{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(0,0,0,0.06);}
   input.message{flex:1;padding:10px;border-radius:10px;border:1px solid #d6dbe0;font-size:14px;}
   button.send{padding:10px 12px;border-radius:10px;border:0;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;}
   #settingsModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);align-items:center;justify-content:center;}
@@ -79,7 +72,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
@@ -107,11 +100,11 @@ const closeSettings = document.getElementById("closeSettings");
 const themeSelect = document.getElementById("themeSelect");
 const newChatBtn = document.getElementById("newChatBtn");
 
-// --- Check login ---
+// --- Login ---
 onAuthStateChanged(auth, user => {
   if(!user) window.location.href="login.html";
   else {
-    currentUser=user;
+    currentUser = { email: user.email, username: user.displayName || user.email.split("@")[0] };
     renderRooms();
     switchRoom("Global");
     requestNotificationPermission();
@@ -132,19 +125,19 @@ function renderRooms(){
 
 // --- Switch Room ---
 function switchRoom(roomId){
-  currentRoom=roomId;
+  currentRoom = roomId;
   renderRooms();
   chatEl.innerHTML="";
   const q=query(collection(db,"rooms",roomId,"messages"),orderBy("createdAt"));
-  onSnapshot(q,snap=>{
+  onSnapshot(q, snap=>{
     chatEl.innerHTML="";
     snap.forEach(docSnap=>{
       const msg=docSnap.data();
       const div=document.createElement("div");
-      div.className="msg "+(msg.from===currentUser.email?"self":"other");
+      div.className="msg "+(msg.from===currentUser.username?"self":"other");
       div.innerHTML=`<div>${msg.text}</div><div class="meta">${msg.from} • ${msg.createdAt?.toDate().toLocaleTimeString()||""}</div>`;
       chatEl.appendChild(div);
-      if(msg.from!==currentUser.email && Notification.permission==="granted"){
+      if(msg.from!==currentUser.username && Notification.permission==="granted"){
         new Notification(`New message from ${msg.from}`,{body:msg.text});
       }
     });
@@ -154,16 +147,16 @@ function switchRoom(roomId){
 
 // --- Send Message ---
 sendBtn.onclick=async ()=>{
-  const text=msgInput.value.trim();
+  const text = msgInput.value.trim();
   if(!text) return;
   await addDoc(collection(db,"rooms",currentRoom,"messages"),{
     text,
-    from:currentUser.email,
-    createdAt:serverTimestamp()
+    from: currentUser.username,
+    createdAt: serverTimestamp()
   });
   msgInput.value="";
 };
-msgInput.addEventListener("keydown",e=>{if(e.key==="Enter") sendBtn.click();});
+msgInput.addEventListener("keydown", e=>{if(e.key==="Enter") sendBtn.click();});
 
 // --- Settings ---
 settingsBtn.onclick=()=>settingsModal.style.display="flex";
@@ -173,7 +166,7 @@ themeSelect.onchange=()=>{
   localStorage.setItem("theme",themeSelect.value);
 };
 const savedTheme=localStorage.getItem("theme");
-if(savedTheme){document.body.dataset.theme=savedTheme;themeSelect.value=savedTheme;}
+if(savedTheme){document.body.dataset.theme=savedTheme; themeSelect.value=savedTheme;}
 
 // --- Notification ---
 function requestNotificationPermission(){
@@ -183,46 +176,16 @@ function requestNotificationPermission(){
 
 // --- Private / Group Chat ---
 newChatBtn.onclick=async ()=>{
-  const emails=prompt("Enter email(s) separated by comma (max 5 others):");
-  if(!emails) return;
-  const emailArr=[...new Set(emails.split(",").map(e=>e.trim()).filter(e=>e && e!==currentUser.email))];
-  if(emailArr.length>5){alert("Max 5 users allowed"); return;}
-  emailArr.push(currentUser.email); // include self
-  const roomId=emailArr.sort().join("_");
-  rooms[roomId]="Group: "+emailArr.join(",");
+  const usernames = prompt("Enter usernames (max 5 others) separated by commas:");
+  if(!usernames) return;
+  const userArr = [...new Set(usernames.split(",").map(u=>u.trim()).filter(u=>u && u!==currentUser.username))];
+  if(userArr.length>5){alert("Max 5 users allowed"); return;}
+  userArr.push(currentUser.username);
+  const roomId = userArr.sort().join("_");
+  rooms[roomId] = "Group: " + userArr.join(", ");
   renderRooms();
-
-  // Send invite document
-  for(const e of emailArr){
-    if(e!==currentUser.email){
-      await setDoc(doc(db,"invites",roomId+"_"+e),{
-        roomId,
-        from:currentUser.email,
-        to:e,
-        accepted:false,
-        createdAt:serverTimestamp()
-      });
-    }
-  }
   switchRoom(roomId);
 };
-
-// --- Check invitations ---
-onSnapshot(collection(db,"invites"),snap=>{
-  snap.forEach(async docSnap=>{
-    const invite=docSnap.data();
-    if(invite.to===currentUser?.email && !invite.accepted){
-      const accept=confirm(`Invite from ${invite.from} to join room:\n${invite.roomId}\nAccept?`);
-      if(accept){
-        await setDoc(doc(db,"invites",docSnap.id),{...invite,accepted:true});
-        rooms[invite.roomId]="Group: "+invite.roomId.split("_").join(", ");
-        renderRooms();
-      } else {
-        await setDoc(doc(db,"invites",docSnap.id),{...invite,accepted:false});
-      }
-    }
-  });
-});
 </script>
 </body>
 </html>
