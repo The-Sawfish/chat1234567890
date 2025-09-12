@@ -17,6 +17,7 @@
   <h2>Hybrid Chat Login</h2>
   <input type="email" id="email" placeholder="Email" />
   <input type="password" id="password" placeholder="Password" />
+  <input type="text" id="username" placeholder="Username (for Sign Up)" />
   <button id="loginBtn">Login</button>
   <button id="signupBtn">Sign Up</button>
 </div>
@@ -24,6 +25,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
@@ -35,6 +37,7 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 document.getElementById("loginBtn").onclick = async () => {
   const email = document.getElementById("email").value;
@@ -50,8 +53,15 @@ document.getElementById("loginBtn").onclick = async () => {
 document.getElementById("signupBtn").onclick = async () => {
   const email = document.getElementById("email").value;
   const pass = document.getElementById("password").value;
+  const username = document.getElementById("username").value.trim();
+  if (!username) {
+    alert("Please enter a username");
+    return;
+  }
   try {
-    await createUserWithEmailAndPassword(auth, email, pass);
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    // Save username tied to UID
+    await setDoc(doc(db, "users", cred.user.uid), { username });
     window.location.href = "chat.html";
   } catch (err) {
     alert("Signup failed: " + err.message);
