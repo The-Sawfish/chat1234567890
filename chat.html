@@ -107,6 +107,34 @@
 </div>
 
 <script type="module">
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+
+const auth = getAuth(app);
+
+// Track login state
+let username = null;
+
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    username = user.email.split("@")[0]; // use email prefix as display name
+    renderRooms();
+    switchRoom("Global");
+    msgInput.disabled = false;
+    sendBtn.disabled = false;
+  } else {
+    username = null;
+    msgInput.disabled = true;
+    sendBtn.disabled = true;
+    alert("⚠️ Please log in to send messages.");
+  }
+});
+
+// Update logout button
+document.getElementById("logout").onclick = async () => {
+  await signOut(auth);
+  window.location.href = "login.html";
+};
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getFirestore, collection, addDoc, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
