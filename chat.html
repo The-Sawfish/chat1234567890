@@ -10,19 +10,26 @@
     --bg:#f5f7fa; --sidebar:#2c3e50; --sidebar-active:#34495e; --accent:#3498db;
     --text:#222; --card:#fff; --self:#2ecc71; --other:#bdc3c7;
   }
-  [data-theme="dark"]{
+  [data-theme="dark"] {
     --bg:#0f1112; --sidebar:#16202b; --sidebar-active:#25343e; --accent:#256aa2;
     --text:#eaeef0; --card:#151718; --self:#27ae60; --other:#4b5563;
   }
+  [data-theme="sunset"] {
+    --bg:#ffebe6; --sidebar:#d35400; --sidebar-active:#e67e22; --accent:#e74c3c;
+    --text:#2c3e50; --card:#fff3f0; --self:#e67e22; --other:#f39c12;
+  }
+  [data-theme="forest"] {
+    --bg:#eafbea; --sidebar:#14532d; --sidebar-active:#166534; --accent:#22c55e;
+    --text:#1a1a1a; --card:#f0fff4; --self:#16a34a; --other:#bbf7d0;
+  }
+
   html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter, Arial, sans-serif}
   .stage{display:flex;justify-content:center;align-items:center;height:100vh;padding:12px;box-sizing:border-box}
   #app{display:flex;width:95%;max-width:1000px;height:84vh;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(2,6,23,.12)}
   #sidebar{width:220px;background:var(--sidebar);color:#fff;padding:12px;box-sizing:border-box;display:flex;flex-direction:column}
   #sidebar h3{margin:0 0 12px;text-align:center;font-size:16px}
   .room-btn{display:flex;align-items:center;justify-content:space-between;padding:8px;border-radius:8px;border:0;background:transparent;color:#fff;margin:6px 0;cursor:pointer;font-weight:600}
-  .room-btn:hover{background:rgba(255,255,255,0.04)}
   .room-btn.active{background:var(--sidebar-active)}
-  .room-label{flex:1;text-align:left;padding-right:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .controls{margin-top:auto;display:flex;flex-direction:column;gap:8px}
   .btn-flat{background:var(--accent);border:0;color:#fff;padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:700}
   .small-flat{background:transparent;border:1px solid rgba(255,255,255,0.08);color:#fff;padding:6px 8px;border-radius:8px;cursor:pointer}
@@ -47,7 +54,6 @@
       <h3>Chats</h3>
       <div id="roomsContainer"></div>
       <div class="controls">
-        <button id="addFriend" class="btn-flat">+ New Chat</button>
         <button id="settings" class="small-flat">⚙️ Settings</button>
       </div>
     </aside>
@@ -60,8 +66,8 @@
       </header>
       <section id="chat"></section>
       <footer>
-        <input id="msgInput" class="message" placeholder="Type a message…" disabled>
-        <button id="sendBtn" class="send" disabled>Send</button>
+        <input id="msgInput" class="message" placeholder="Type a message…">
+        <button id="sendBtn" class="send">Send</button>
       </footer>
     </main>
   </div>
@@ -71,7 +77,9 @@
 <div id="settingsModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);align-items:center;justify-content:center;">
   <div style="background:var(--card);padding:20px;border-radius:12px;min-width:280px;color:var(--text)">
     <h3>⚙️ Settings</h3>
-    <button id="themeToggle" class="btn-flat" style="margin:10px 0">Toggle Theme</button>
+    <button id="themeToggle" class="btn-flat" style="margin:10px 0">Toggle Dark/Light</button>
+    <button id="sunsetTheme" class="btn-flat" style="margin:10px 0;background:#e67e22">Sunset Theme</button>
+    <button id="forestTheme" class="btn-flat" style="margin:10px 0;background:#16a34a">Forest Theme</button>
     <button id="logout" class="btn-flat" style="background:#e74c3c">Logout</button>
     <button onclick="closeSettings()" class="small-flat" style="margin-top:10px">Close</button>
   </div>
@@ -92,14 +100,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// check login (force login.html if no username)
 let username = sessionStorage.getItem("username");
 if (!username) {
-  username = prompt("Enter a username:");
-  if (!username) username = "Guest" + Math.floor(Math.random()*1000);
-  sessionStorage.setItem("username", username);
+  window.location.href = "login.html"; // redirect
 }
-let currentRoom = "Global";
 
+// elements
 const roomsContainer = document.getElementById("roomsContainer");
 const chatEl = document.getElementById("chat");
 const titleEl = document.getElementById("title");
@@ -107,22 +114,16 @@ const subtitleEl = document.getElementById("subtitle");
 const msgInput = document.getElementById("msgInput");
 const sendBtn = document.getElementById("sendBtn");
 
-function roomKey(a,b){ return [a,b].sort().join("_"); }
+let currentRoom = "Global";
 
 function renderRooms() {
   roomsContainer.innerHTML = "";
   const globalBtn = document.createElement("button");
-  globalBtn.className = "room-btn" + (currentRoom==="Global"?" active":"");
+  globalBtn.className = "room-btn active";
   globalBtn.innerHTML = `<span class="room-label">🌍 Global</span>`;
-  globalBtn.onclick=()=>switchRoom("Global");
   roomsContainer.appendChild(globalBtn);
 }
-
-function switchRoom(rk) {
-  currentRoom = rk;
-  renderRooms();
-  renderChat();
-}
+renderRooms();
 
 function appendMsgDOM(obj) {
   const d=document.createElement("div");
@@ -133,8 +134,8 @@ function appendMsgDOM(obj) {
 }
 
 function renderChat() {
-  titleEl.innerText = username + " • " + currentRoom;
-  subtitleEl.innerText = currentRoom==="Global" ? "Public chat" : "Private chat";
+  titleEl.innerText = "🌍 Global Chat";
+  subtitleEl.innerText = "Public chat room";
   chatEl.innerHTML="";
   const q=query(collection(db,"rooms",currentRoom,"messages"),orderBy("time"));
   onSnapshot(q,(snap)=>{
@@ -142,8 +143,8 @@ function renderChat() {
     snap.forEach(doc=>appendMsgDOM(doc.data()));
     chatEl.scrollTop=chatEl.scrollHeight;
   });
-  msgInput.disabled=false; sendBtn.disabled=false;
 }
+renderChat();
 
 async function sendMessage(text){
   await addDoc(collection(db,"rooms",currentRoom,"messages"),{
@@ -164,28 +165,31 @@ msgInput.addEventListener("keydown",(e)=>{
   if(e.key==="Enter") sendBtn.click();
 });
 
-document.getElementById("addFriend").onclick=()=>{
-  const friend=prompt("Enter friend's username:");
-  if(!friend || friend===username) return;
-  switchRoom(roomKey(username,friend));
-};
-
+// settings modal
 document.getElementById("settings").onclick=()=>{
   document.getElementById("settingsModal").style.display="flex";
 };
-
 document.getElementById("logout").onclick=()=>{
   sessionStorage.clear();
-  location.reload();
+  location.href="login.html";
 };
-
 document.getElementById("themeToggle").onclick=()=>{
+  toggleTheme("dark","light");
+};
+document.getElementById("sunsetTheme").onclick=()=>{
+  document.body.setAttribute("data-theme","sunset");
+  localStorage.setItem("theme","sunset");
+};
+document.getElementById("forestTheme").onclick=()=>{
+  document.body.setAttribute("data-theme","forest");
+  localStorage.setItem("theme","forest");
+};
+function toggleTheme(a,b){
   const cur=document.body.getAttribute("data-theme")||"light";
-  const next=cur==="light"?"dark":"light";
+  const next=cur===a?b:a;
   document.body.setAttribute("data-theme",next);
   localStorage.setItem("theme",next);
-};
-
+}
 function closeSettings(){
   document.getElementById("settingsModal").style.display="none";
 }
@@ -194,8 +198,23 @@ window.closeSettings=closeSettings;
 const savedTheme=localStorage.getItem("theme");
 if(savedTheme) document.body.setAttribute("data-theme",savedTheme);
 
-renderRooms();
-switchRoom("Global");
+// Notifications
+if ("Notification" in window && Notification.permission !== "denied") {
+  Notification.requestPermission();
+}
+function showNotification(msg) {
+  if (Notification.permission === "granted" && msg.user !== username) {
+    new Notification("New message from " + msg.user, { body: msg.text });
+  }
+}
+const q=query(collection(db,"rooms",currentRoom,"messages"),orderBy("time"));
+onSnapshot(q,(snap)=>{
+  snap.docChanges().forEach(change=>{
+    if(change.type==="added"){
+      showNotification(change.doc.data());
+    }
+  });
+});
 </script>
 </body>
 </html>
