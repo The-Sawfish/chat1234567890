@@ -16,29 +16,32 @@ const firebaseConfig = {
   messagingSenderId: "8350065462",
   appId: "1:8350065462:web:779c8fd3c81acaeebc8997"
 };
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
 document.addEventListener("DOMContentLoaded", () => {
-  const loginBtn = document.getElementById("loginBtn");
   const emailInput = document.getElementById("email");
   const passInput = document.getElementById("password");
+  const loginBtn = document.getElementById("loginBtn");
   const errorMsg = document.getElementById("errorMsg");
 
   loginBtn.onclick = async () => {
     const email = emailInput.value.trim();
     const password = passInput.value.trim();
     errorMsg.innerText = "";
+
     if (!email || !password) {
-      errorMsg.innerText = "Please enter email and password.";
+      errorMsg.innerText = "Email and password are required.";
       return;
     }
+
     try {
       await signInWithEmailAndPassword(auth, email, password);
       // Redirect to chat page
       window.location.href = "chat.html";
     } catch (err) {
-      errorMsg.innerText = err.message;
+      errorMsg.innerText = "Invalid email or password.";
     }
   };
 
@@ -53,7 +56,7 @@ body {font-family: Arial, sans-serif; display:flex; justify-content:center; alig
 input {width:100%; padding:10px; margin:10px 0; border-radius:8px; border:1px solid #ccc; box-sizing:border-box;}
 button {width:100%; padding:10px; border:none; border-radius:8px; background:#3498db; color:#fff; font-weight:700; cursor:pointer;}
 button:hover {background:#2980b9;}
-#signupLink {margin-top:12px; display:block; color:#3498db; cursor:pointer; text-decoration:underline;}
+#signupLink {margin-top:12px; display:block; color:#2ecc71; cursor:pointer; text-decoration:underline;}
 #errorMsg {color:red; font-size:13px; margin-top:8px;}
 h2 {margin-bottom:20px;}
 </style>
