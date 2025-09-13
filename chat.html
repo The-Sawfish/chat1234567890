@@ -1,219 +1,232 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Hybrid Chat — Firebase</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-:root {
-  --bg:#f5f7fa; --sidebar:#2c3e50; --sidebar-active:#34495e; --accent:#3498db;
-  --text:#222; --card:#fff; --self:#2ecc71; --other:#bdc3c7;
-}
-[data-theme="dark"]{
-  --bg:#0f1112; --sidebar:#16202b; --sidebar-active:#25343e; --accent:#256aa2;
-  --text:#eaeef0; --card:#151718; --self:#27ae60; --other:#4b5563;
-}
-html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter, Arial, sans-serif}
-.stage{display:flex;justify-content:center;align-items:center;height:100vh;padding:12px;box-sizing:border-box}
-#app{display:flex;width:95%;max-width:1000px;height:84vh;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px rgba(2,6,23,.12)}
-#sidebar{width:220px;background:var(--sidebar);color:#fff;padding:12px;box-sizing:border-box;display:flex;flex-direction:column}
-#sidebar h3{margin:0 0 12px;text-align:center;font-size:16px}
-.room-btn{display:flex;align-items:center;justify-content:space-between;padding:8px;border-radius:8px;border:0;background:transparent;color:#fff;margin:6px 0;cursor:pointer;font-weight:600}
-.room-btn:hover{background:rgba(255,255,255,0.04)}
-.room-btn.active{background:var(--sidebar-active)}
-.room-label{flex:1;text-align:left;padding-right:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.controls{margin-top:auto;display:flex;flex-direction:column;gap:8px}
-.btn-flat{background:var(--accent);border:0;color:#fff;padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:700}
-.small-flat{background:transparent;border:1px solid rgba(255,255,255,0.08);color:#fff;padding:6px 8px;border-radius:8px;cursor:pointer}
-#main{flex:1;display:flex;flex-direction:column;background:var(--card)}
-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--accent);color:#fff}
-#title{font-weight:800}
-#subtitle{font-size:12px;opacity:.95}
-#chat{flex:1;overflow:auto;padding:14px;box-sizing:border-box;background:linear-gradient(180deg, rgba(0,0,0,0.02), transparent)}
-.msg{clear:both;max-width:72%;padding:10px 12px;border-radius:12px;margin:8px 0;word-break:break-word}
-.self{background:var(--self);color:#fff;float:right;border-bottom-right-radius:4px}
-.other{background:var(--other);float:left;color:#111;border-bottom-left-radius:4px}
-.meta{font-size:11px;color:rgba(0,0,0,0.45);margin-top:6px}
-footer{display:flex;gap:8px;padding:10px;background:transparent;border-top:1px solid rgba(0,0,0,0.06)}
-input.message{flex:1;padding:10px;border-radius:10px;border:1px solid #d6dbe0;font-size:14px}
-button.send{padding:10px 12px;border-radius:10px;border:0;background:var(--accent);color:#fff;font-weight:700;cursor:pointer}
-#settingsModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);align-items:center;justify-content:center;}
-#settingsContent{background:var(--card);padding:20px;border-radius:12px;min-width:280px;color:var(--text);position:relative;}
-#closeSettings{position:absolute;top:10px;right:10px;cursor:pointer;font-weight:700;background:transparent;border:none;color:var(--text);font-size:16px;}
-</style>
+  <meta charset="UTF-8">
+  <title>Chat App</title>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    :root[data-theme="dark"] { --bg: #121212; --text: #fff; --bubble: #333; }
+    :root[data-theme="light"] { --bg: #f5f5f5; --text: #000; --bubble: #fff; }
+    :root[data-theme="blue"] { --bg: #eaf3ff; --text: #000; --bubble: #cce0ff; }
+
+    #app { display: flex; height: 100vh; }
+    #sidebar {
+      width: 250px; background: #222; color: #fff; padding: 10px;
+      display: flex; flex-direction: column;
+    }
+    #sidebar h2 { margin-top: 0; }
+    #chatList { flex: 1; overflow-y: auto; margin-top: 10px; }
+    .chat-item { padding: 10px; cursor: pointer; border-radius: 5px; margin: 5px 0; background: #333; }
+    .chat-item:hover { background: #444; }
+
+    #main {
+      flex: 1; display: flex; flex-direction: column;
+    }
+    #messages {
+      flex: 1; overflow-y: auto; padding: 10px;
+    }
+    .msg {
+      padding: 8px 12px; margin: 5px; border-radius: 12px;
+      max-width: 60%; clear: both;
+    }
+    .mine { background: var(--bubble); float: right; }
+    .theirs { background: #888; float: left; color: #fff; }
+
+    #inputBar {
+      display: flex; border-top: 1px solid #ccc; padding: 10px;
+    }
+    #inputBar input { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #ccc; }
+    #inputBar button { margin-left: 8px; padding: 8px 12px; border: none; border-radius: 8px; background: #0066ff; color: #fff; cursor: pointer; }
+
+    #settingsModal {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center;
+    }
+    #settingsBox {
+      background: #fff; color: #000; padding: 20px; border-radius: 10px; width: 300px;
+    }
+    #settingsBox h3 { margin-top: 0; }
+    #closeSettings { float: right; cursor: pointer; color: red; }
+
+    #newChatBtn {
+      padding: 10px; margin: 10px 0; background: #28a745; color: #fff; border: none;
+      border-radius: 5px; cursor: pointer; width: 100%;
+    }
+  </style>
 </head>
-<body data-theme="light">
-<div class="stage">
-  <div id="app">
-    <aside id="sidebar">
-      <h3>Chats</h3>
-      <div id="roomsContainer"></div>
-      <div class="controls">
-        <button id="findUser" class="btn-flat">+ New Chat</button>
-        <button id="settingsBtn" class="small-flat">⚙️ Settings</button>
-      </div>
-    </aside>
-    <main id="main">
-      <header>
-        <div>
-          <div id="title">—</div>
-          <div id="subtitle">—</div>
-        </div>
-      </header>
-      <section id="chat"></section>
-      <footer>
-        <input id="msgInput" class="message" placeholder="Type a message…" disabled>
-        <button id="sendBtn" class="send" disabled>Send</button>
-      </footer>
-    </main>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <h2>Chats</h2>
+    <button id="newChatBtn">+ New Private Chat</button>
+    <div id="chatList"></div>
+    <button onclick="logout()">Logout</button>
+    <button onclick="openSettings()">⚙ Settings</button>
+  </div>
+  <div id="main">
+    <div id="messages"></div>
+    <div id="inputBar">
+      <input id="messageInput" placeholder="Type a message..." />
+      <button onclick="sendMessage()">Send</button>
+    </div>
   </div>
 </div>
 
-<!-- Settings Modal -->
 <div id="settingsModal">
-  <div id="settingsContent">
-    <button id="closeSettings">X</button>
-    <h3>⚙️ Settings</h3>
-    <label for="themeSelect">Select Theme:</label>
-    <select id="themeSelect" class="btn-flat" style="width:100%;margin:10px 0;">
-      <option value="light">Light</option>
-      <option value="dark">Dark</option>
-      <option value="blue">Blue</option>
-      <option value="green">Green</option>
-      <option value="pink">Pink</option>
-    </select>
-    <button id="logoutBtn" class="btn-flat" style="background:#e74c3c">Logout</button>
+  <div id="settingsBox">
+    <span id="closeSettings">X</span>
+    <h3>Settings</h3>
+    <label>Theme:
+      <select id="themeSelect">
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+        <option value="blue">Blue</option>
+      </select>
+    </label>
   </div>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+<script>
+  // Firebase setup
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
 
-// Firebase config
-const firebaseConfig = {
-  apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
-  authDomain: "hybridchat-8a96c.firebaseapp.com",
-  projectId: "hybridchat-8a96c",
-  storageBucket: "hybridchat-8a96c.firebasestorage.app",
-  messagingSenderId: "8350065462",
-  appId: "1:8350065462:web:779c8fd3c81acaeebc8997"
-};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+  let currentUser = null;
+  let currentRoom = "global";
 
-// UI refs
-const chatEl = document.getElementById("chat");
-const roomsContainer = document.getElementById("roomsContainer");
-const msgInput = document.getElementById("msgInput");
-const sendBtn = document.getElementById("sendBtn");
-const titleEl = document.getElementById("title");
-const subtitleEl = document.getElementById("subtitle");
-const settingsBtn = document.getElementById("settingsBtn");
-const settingsModal = document.getElementById("settingsModal");
-const closeSettings = document.getElementById("closeSettings");
-const themeSelect = document.getElementById("themeSelect");
-const logoutBtn = document.getElementById("logoutBtn");
-const findUserBtn = document.getElementById("findUser");
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      // Always update localStorage username
+      db.collection("users").doc(user.uid).get().then(doc => {
+        currentUser = doc.exists ? doc.data().username : user.email;
+        localStorage.setItem("username", currentUser);
+        loadChats();
+        loadMessages("global");
+      });
+    } else {
+      window.location.href = "login.html";
+    }
+  });
 
-let currentUser = null;
-let currentRoom = "Global";
-const rooms = {Global: "🌍 Global Chat"};
-
-document.getElementById("main").style.display="none";
-
-// Auth check
-onAuthStateChanged(auth, user=>{
-  if(!user){ window.location.href="login.html"; return; }
-  currentUser = {email:user.email, username:user.displayName || user.email.split("@")[0]};
-  document.getElementById("main").style.display="flex";
-  renderRooms();
-  switchRoom("Global");
-  loadTheme();
-});
-
-// --- Rooms ---
-function renderRooms(){
-  roomsContainer.innerHTML="";
-  for(const [id,label] of Object.entries(rooms)){
-    const btn=document.createElement("button");
-    btn.className="room-btn"+(currentRoom===id?" active":"");
-    btn.innerHTML=`<span class="room-label">${label}</span>`;
-    btn.onclick=()=>switchRoom(id);
-    roomsContainer.appendChild(btn);
+  // Load chat list
+  function loadChats() {
+    const list = document.getElementById("chatList");
+    list.innerHTML = `<div class="chat-item" onclick="switchRoom('global')">🌍 Global Chat</div>`;
+    db.collection("privateChats").where("members", "array-contains", currentUser)
+      .onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
+          if (change.type === "added") {
+            const roomId = change.doc.id;
+            const chatItem = document.createElement("div");
+            chatItem.className = "chat-item";
+            chatItem.innerText = "🔒 " + roomId.replaceAll("_", " & ");
+            chatItem.onclick = () => switchRoom(roomId, true);
+            list.appendChild(chatItem);
+          }
+        });
+      });
   }
-}
 
-// --- Switch Room ---
-function switchRoom(r){
-  currentRoom = r;
-  renderRooms();
-  chatEl.innerHTML="";
-  titleEl.innerText = currentUser.username + " • " + currentRoom;
-  subtitleEl.innerText = currentRoom==="Global"?"Public chat":"Private chat";
-  msgInput.disabled=false; sendBtn.disabled=false;
+  // Switch room
+  function switchRoom(roomId, isPrivate=false) {
+    currentRoom = roomId;
+    document.getElementById("messages").innerHTML = "";
+    loadMessages(roomId, isPrivate);
+  }
 
-  const q = query(collection(db,"rooms",currentRoom,"messages"),orderBy("createdAt","asc"));
-  onSnapshot(q,snap=>{
-    chatEl.innerHTML="";
-    snap.forEach(doc=>{
-      const msg=doc.data();
-      const div=document.createElement("div");
-      div.className="msg "+(msg.from===currentUser.username?"self":"other");
-      div.innerHTML=`<div>${msg.text}</div>
-        <div class="meta">${msg.from} • ${msg.createdAt?.toDate().toLocaleTimeString()||""}</div>`;
-      chatEl.appendChild(div);
+  // Load messages
+  function loadMessages(roomId, isPrivate=false) {
+    let ref = isPrivate ? db.collection("privateChats").doc(roomId).collection("messages") :
+                          db.collection("global");
+    ref.orderBy("timestamp").onSnapshot(snapshot => {
+      const messages = document.getElementById("messages");
+      messages.innerHTML = "";
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const msg = document.createElement("div");
+        msg.className = "msg " + (data.sender === currentUser ? "mine" : "theirs");
+        msg.innerText = `${data.sender}: ${data.text}`;
+        messages.appendChild(msg);
+      });
+      messages.scrollTop = messages.scrollHeight;
     });
-    chatEl.scrollTop=chatEl.scrollHeight;
-  });
-}
-
-// --- Send Message ---
-sendBtn.onclick=async()=>{
-  const text=msgInput.value.trim();
-  if(!text) return;
-  await addDoc(collection(db,"rooms",currentRoom,"messages"),{
-    text,
-    from: currentUser.username,
-    createdAt: serverTimestamp()
-  });
-  msgInput.value="";
-};
-msgInput.addEventListener("keydown", e=>{ if(e.key==="Enter") sendBtn.click(); });
-
-// --- Find User (Private chat) ---
-findUserBtn.onclick=()=>{
-  const friend = prompt("Enter another user's username:");
-  if(!friend || friend===currentUser.username) return;
-  const roomKey=[currentUser.username,friend].sort().join("_");
-  rooms[roomKey] = `👤 ${friend}`;
-  switchRoom(roomKey);
-};
-
-// --- Settings ---
-settingsBtn.onclick=()=>settingsModal.style.display="flex";
-closeSettings.onclick=()=>settingsModal.style.display="none";
-themeSelect.onchange=()=>{
-  const val=themeSelect.value;
-  document.body.dataset.theme=val;
-  localStorage.setItem("theme",val);
-};
-logoutBtn.onclick=()=>{
-  signOut(auth);
-  sessionStorage.clear();
-  window.location.href="login.html";
-};
-
-// --- Load saved theme ---
-function loadTheme(){
-  const saved=localStorage.getItem("theme");
-  if(saved){
-    document.body.dataset.theme=saved;
-    themeSelect.value=saved;
   }
-}
+
+  // Send message
+  function sendMessage() {
+    const text = document.getElementById("messageInput").value;
+    if (!text) return;
+    const msg = {
+      sender: currentUser,
+      text,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (currentRoom === "global") {
+      db.collection("global").add(msg);
+    } else {
+      db.collection("privateChats").doc(currentRoom).collection("messages").add(msg);
+    }
+    document.getElementById("messageInput").value = "";
+  }
+
+  // New private chat
+  document.getElementById("newChatBtn").onclick = () => {
+    const other = prompt("Enter username of user to chat with:");
+    if (!other || other === currentUser) return;
+    const roomId = [currentUser, other].sort().join("_");
+    db.collection("privateChats").doc(roomId).set({
+      members: [currentUser, other]
+    }, { merge: true });
+    switchRoom(roomId, true);
+  };
+
+  // Delete private chat
+  function deletePrivateChat(roomId) {
+    if (confirm("Delete this private chat?")) {
+      db.collection("privateChats").doc(roomId).delete();
+      switchRoom("global");
+    }
+  }
+
+  // Settings
+  function openSettings() {
+    document.getElementById("settingsModal").style.display = "flex";
+  }
+  document.getElementById("closeSettings").onclick = () => {
+    document.getElementById("settingsModal").style.display = "none";
+  };
+  const themeSelect = document.getElementById("themeSelect");
+  themeSelect.onchange = () => {
+    document.documentElement.dataset.theme = themeSelect.value;
+    localStorage.setItem("theme", themeSelect.value);
+  };
+  const savedTheme = localStorage.getItem("theme");
+  if (savedTheme) {
+    document.documentElement.dataset.theme = savedTheme;
+    themeSelect.value = savedTheme;
+  }
+
+  // Logout
+  function logout() {
+    auth.signOut();
+  }
 </script>
 </body>
 </html>
