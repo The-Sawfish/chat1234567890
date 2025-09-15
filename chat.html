@@ -1,232 +1,640 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Chat App</title>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-    }
-    :root[data-theme="dark"] { --bg: #121212; --text: #fff; --bubble: #333; }
-    :root[data-theme="light"] { --bg: #f5f5f5; --text: #000; --bubble: #fff; }
-    :root[data-theme="blue"] { --bg: #eaf3ff; --text: #000; --bubble: #cce0ff; }
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Hybrid Chat — Live</title>
 
-    #app { display: flex; height: 100vh; }
-    #sidebar {
-      width: 250px; background: #222; color: #fff; padding: 10px;
-      display: flex; flex-direction: column;
-    }
-    #sidebar h2 { margin-top: 0; }
-    #chatList { flex: 1; overflow-y: auto; margin-top: 10px; }
-    .chat-item { padding: 10px; cursor: pointer; border-radius: 5px; margin: 5px 0; background: #333; }
-    .chat-item:hover { background: #444; }
+<!-- Minimal professional styling (responsive) -->
+<style>
+:root{
+  --bg:#f5f7fa; --sidebar:#1f2937; --accent:#2563eb; --card:#ffffff; --text:#0f172a;
+  --self:#0ea5a4; --other:#e6e7ea;
+}
+[data-theme="dark"]{
+  --bg:#0b1220; --sidebar:#0b1220; --accent:#2563eb; --card:#0f1724; --text:#e6eef6;
+  --self:#0ea5a4; --other:#1f2937;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,Arial,sans-serif;color:var(--text)}
+.container{display:flex;height:100vh;gap:12px;padding:12px}
+.sidebar{width:260px;background:var(--sidebar);color:#fff;border-radius:10px;padding:12px;display:flex;flex-direction:column}
+.sidebar h3{margin:6px 0 12px;font-size:16px;text-align:center}
+.rooms{flex:1;overflow:auto;padding-bottom:8px}
+.room-btn{display:flex;align-items:center;justify-content:space-between;padding:8px;border-radius:8px;background:transparent;border:0;color:#fff;margin-bottom:8px;cursor:pointer;font-weight:600}
+.room-btn.active{background:rgba(255,255,255,0.06)}
+.controls{display:flex;flex-direction:column;gap:8px}
+.btn{padding:10px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer;font-weight:700}
+.btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.08);color:#fff}
+.main{flex:1;display:flex;flex-direction:column;background:var(--card);border-radius:10px;overflow:hidden}
+.header{display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--accent);color:#fff}
+.header .left{display:flex;flex-direction:column}
+.header .title{font-weight:800}
+.header .subtitle{font-size:12px;opacity:.9}
+.content{flex:1;overflow:auto;padding:16px;background:linear-gradient(180deg, rgba(0,0,0,0.02), transparent)}
+.bubble{display:inline-block;padding:10px 12px;border-radius:12px;margin:8px 0;max-width:75%;word-break:break-word}
+.bubble.me{background:var(--self);color:#fff;float:right;border-bottom-right-radius:4px}
+.bubble.them{background:var(--other);color:var(--text);float:left;border-bottom-left-radius:4px}
+.meta{font-size:11px;opacity:.8;margin-top:6px}
+.footer{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(0,0,0,0.06);align-items:center}
+.input{flex:1;padding:10px;border-radius:10px;border:1px solid #e6eef6}
+.icon-btn{background:transparent;border:0;cursor:pointer;padding:8px}
+.small{font-size:13px;padding:8px 10px;border-radius:8px}
+.top-actions{display:flex;gap:8px;align-items:center}
 
-    #main {
-      flex: 1; display: flex; flex-direction: column;
-    }
-    #messages {
-      flex: 1; overflow-y: auto; padding: 10px;
-    }
-    .msg {
-      padding: 8px 12px; margin: 5px; border-radius: 12px;
-      max-width: 60%; clear: both;
-    }
-    .mine { background: var(--bubble); float: right; }
-    .theirs { background: #888; float: left; color: #fff; }
-
-    #inputBar {
-      display: flex; border-top: 1px solid #ccc; padding: 10px;
-    }
-    #inputBar input { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #ccc; }
-    #inputBar button { margin-left: 8px; padding: 8px 12px; border: none; border-radius: 8px; background: #0066ff; color: #fff; cursor: pointer; }
-
-    #settingsModal {
-      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center;
-    }
-    #settingsBox {
-      background: #fff; color: #000; padding: 20px; border-radius: 10px; width: 300px;
-    }
-    #settingsBox h3 { margin-top: 0; }
-    #closeSettings { float: right; cursor: pointer; color: red; }
-
-    #newChatBtn {
-      padding: 10px; margin: 10px 0; background: #28a745; color: #fff; border: none;
-      border-radius: 5px; cursor: pointer; width: 100%;
-    }
-  </style>
+/* Modal */
+.modal{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center}
+.panel{background:var(--card);padding:16px;border-radius:10px;min-width:320px;max-width:90%;color:var(--text)}
+.user-list{max-height:260px;overflow:auto;border:1px solid #eee;padding:8px;border-radius:8px;margin:8px 0}
+.user-item{display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid #f0f0f0}
+.badge{background:#ff5252;color:#fff;padding:4px 8px;border-radius:999px;font-size:12px}
+.footer .note{font-size:12px;color:rgba(0,0,0,0.45)}
+@media(max-width:800px){
+  .sidebar{width:88px;padding:8px}
+  .room-btn .label{display:none}
+  .header{padding:10px}
+  .content{padding:10px}
+}
+</style>
 </head>
-<body>
-<div id="app">
-  <div id="sidebar">
-    <h2>Chats</h2>
-    <button id="newChatBtn">+ New Private Chat</button>
-    <div id="chatList"></div>
-    <button onclick="logout()">Logout</button>
-    <button onclick="openSettings()">⚙ Settings</button>
+<body data-theme="light">
+
+<div class="container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <h3>Chats</h3>
+
+    <div class="rooms" id="roomsList">
+      <!-- rooms will be injected here -->
+    </div>
+
+    <div class="controls">
+      <button id="newChatBtn" class="btn" title="New private/group chat">+ New Chat</button>
+      <button id="refreshUsers" class="btn-ghost">Refresh users</button>
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+        <button id="settingsBtn" class="btn-ghost" style="flex:1">Settings</button>
+        <button id="loginBtn" class="btn-ghost" style="flex:1">Login</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="header">
+      <div class="left">
+        <div id="title" class="title">—</div>
+        <div id="subtitle" class="subtitle">—</div>
+      </div>
+      <div class="top-actions">
+        <div id="membersList" style="font-size:13px;opacity:.95"></div>
+        <button id="deleteRoomBtn" class="icon-btn small" title="Delete room" style="display:none">Delete Chat</button>
+      </div>
+    </div>
+
+    <div id="content" class="content"></div>
+
+    <div class="footer">
+      <input id="msgInput" class="input" placeholder="Type a message…" disabled />
+      <button id="sendBtn" class="btn" disabled>Send</button>
+      <div style="width:8px"></div>
+    </div>
+  </main>
+</div>
+
+<!-- Create Chat Modal -->
+<div id="createModal" class="modal" aria-hidden="true">
+  <div class="panel">
+    <h3>Create private/group chat (max 6)</h3>
+    <div style="font-size:13px;color:rgba(0,0,0,0.6)">Search and select up to 5 other users:</div>
+    <input id="userSearch" placeholder="Search username..." style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;margin-top:8px" />
+    <div id="usersContainer" class="user-list"></div>
+    <input id="groupLabel" placeholder="Optional chat label" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;margin-top:8px" />
+    <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end">
+      <button id="createCancel" class="btn-ghost small">Cancel</button>
+      <button id="createConfirm" class="btn small">Create</button>
+    </div>
+    <div id="createMsg" style="color:#c0392b;margin-top:8px;font-size:13px"></div>
   </div>
-  <div id="main">
-    <div id="messages"></div>
-    <div id="inputBar">
-      <input id="messageInput" placeholder="Type a message..." />
-      <button onclick="sendMessage()">Send</button>
+</div>
+
+<!-- Settings Modal -->
+<div id="settingsModal" class="modal">
+  <div class="panel">
+    <button id="closeSettings" style="float:right;border:0;background:transparent;cursor:pointer">✕</button>
+    <h3>Settings</h3>
+    <label>Theme</label>
+    <select id="themeSelect" style="width:100%;padding:8px;margin-top:8px;border-radius:8px;border:1px solid #ddd">
+      <option value="light">Light</option>
+      <option value="dark">Dark</option>
+      <option value="blue">Blue</option>
+      <option value="green">Green</option>
+    </select>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+      <button id="closeSettingsBtn" class="btn-ghost small">Close</button>
     </div>
   </div>
 </div>
 
-<div id="settingsModal">
-  <div id="settingsBox">
-    <span id="closeSettings">X</span>
-    <h3>Settings</h3>
-    <label>Theme:
-      <select id="themeSelect">
-        <option value="dark">Dark</option>
-        <option value="light">Light</option>
-        <option value="blue">Blue</option>
-      </select>
-    </label>
-  </div>
-</div>
+<script type="module">
+/* ======= Firebase imports (modular) ======= */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDoc, setDoc, addDoc,
+  query, where, orderBy, onSnapshot, serverTimestamp, getDocs,
+  writeBatch, limit, deleteDoc
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-<script>
-  // Firebase setup
-  const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
-  const db = firebase.firestore();
+/* ======= CONFIG — use your project config (kept same as yours) ======= */
+const firebaseConfig = {
+  apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
+  authDomain: "hybridchat-8a96c.firebaseapp.com",
+  projectId: "hybridchat-8a96c",
+  storageBucket: "hybridchat-8a96c.firebasestorage.app",
+  messagingSenderId: "8350065462",
+  appId: "1:8350065462:web:779c8fd3c81acaeebc8997"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-  let currentUser = null;
-  let currentRoom = "global";
+/* ======= UI refs ======= */
+const roomsListEl = document.getElementById('roomsList');
+const contentEl = document.getElementById('content');
+const titleEl = document.getElementById('title');
+const subtitleEl = document.getElementById('subtitle');
+const membersListEl = document.getElementById('membersList');
+const msgInput = document.getElementById('msgInput');
+const sendBtn = document.getElementById('sendBtn');
+const newChatBtn = document.getElementById('newChatBtn');
+const createModal = document.getElementById('createModal');
+const usersContainer = document.getElementById('usersContainer');
+const userSearch = document.getElementById('userSearch');
+const createConfirm = document.getElementById('createConfirm');
+const createCancel = document.getElementById('createCancel');
+const createMsg = document.getElementById('createMsg');
+const groupLabel = document.getElementById('groupLabel');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsModal = document.getElementById('settingsModal');
+const closeSettings = document.getElementById('closeSettings');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+const themeSelect = document.getElementById('themeSelect');
+const loginBtn = document.getElementById('loginBtn');
+const refreshUsersBtn = document.getElementById('refreshUsers');
+const deleteRoomBtn = document.getElementById('deleteRoomBtn');
 
-  auth.onAuthStateChanged(user => {
-    if (user) {
-      // Always update localStorage username
-      db.collection("users").doc(user.uid).get().then(doc => {
-        currentUser = doc.exists ? doc.data().username : user.email;
-        localStorage.setItem("username", currentUser);
-        loadChats();
-        loadMessages("global");
-      });
-    } else {
-      window.location.href = "login.html";
+/* ======= App state ======= */
+let currentUser = null;         // { uid, email, username } or null
+let currentRoom = 'Global';     // 'Global' or roomId
+let roomsMap = { Global: { label: '🌍 Global' } }; // roomId => meta
+let roomsUnsub = null;
+let messagesUnsub = null;
+const messageIds = new Set(); // message ids for current room
+
+/* ======= Helpers ======= */
+function sanitizeForId(name){
+  // replace whitespace with underscore, remove slashes
+  return name.replace(/\s+/g,'_').replace(/\//g,'-');
+}
+function makeRoomId(usernames){
+  // usernames = array of username strings (already trimmed)
+  const arr = usernames.map(s=>sanitizeForId(s)).sort();
+  return arr.join('___'); // stable doc id
+}
+function showModal(el){ el.style.display='flex' }
+function hideModal(el){ el.style.display='none' }
+
+/* ======= Auth behavior (no redirect) ======= */
+onAuthStateChanged(auth, async (u) => {
+  if(u){
+    // load or create user doc to ensure canonical username
+    try {
+      const uDocRef = doc(db, 'users', u.uid);
+      const uSnap = await getDoc(uDocRef);
+      let username;
+      if(uSnap.exists()){
+        username = uSnap.data().username || (u.displayName || u.email.split('@')[0]);
+        // make sure doc has username
+        await setDoc(uDocRef, { username, email: u.email }, { merge: true });
+      } else {
+        username = u.displayName || u.email.split('@')[0];
+        await setDoc(uDocRef, { username, email: u.email, createdAt: serverTimestamp() });
+      }
+      currentUser = { uid: u.uid, email: u.email, username };
+      sessionStorage.setItem('username', username);
+    } catch(e){
+      console.error('Failed to load user doc', e);
+      // fallback to auth displayName / email prefix
+      currentUser = { uid: u.uid, email: u.email, username: u.displayName || u.email.split('@')[0] };
     }
+
+    // enable UI controls that require login
+    sendBtn.disabled = false;
+    msgInput.disabled = false;
+    newChatBtn.disabled = false;
+    loginBtn.textContent = 'Logout';
+    loginBtn.onclick = async () => { await signOut(auth); location.reload(); };
+
+    // subscribe to rooms that include this username
+    subscribeRoomsForUser(currentUser.username);
+  } else {
+    // not logged in — allow viewing Global, but disable creation/sending
+    currentUser = null;
+    sendBtn.disabled = true;
+    msgInput.disabled = true;
+    newChatBtn.disabled = true;
+    loginBtn.textContent = 'Login / Signup';
+    loginBtn.onclick = ()=> { window.location.href = 'login.html'; };
+    // show only Global
+    roomsMap = { Global: { label: '🌍 Global' } };
+    renderRooms();
+    switchRoom('Global');
+    // don't subscribe to roomsMeta
+    if(roomsUnsub){ roomsUnsub(); roomsUnsub = null; }
+  }
+
+  // make sure theme from localStorage applied
+  const saved = localStorage.getItem('theme');
+  if(saved) { document.body.setAttribute('data-theme', saved); themeSelect.value = saved; }
+});
+
+/* ======= Rooms (meta) subscription for logged-in user ======= */
+function subscribeRoomsForUser(username){
+  // unsubscribe existing
+  if(roomsUnsub) roomsUnsub();
+
+  // Always keep Global
+  roomsMap = { Global: { label: '🌍 Global' } };
+  renderRooms();
+
+  // Query roomsMeta where members array contains username
+  const q = query(collection(db,'roomsMeta'), where('members','array-contains', username));
+  roomsUnsub = onSnapshot(q, snap => {
+    snap.forEach(docSnap => {
+      const id = docSnap.id;
+      const data = docSnap.data();
+      // store meta
+      roomsMap[id] = {
+        label: data.label || (data.members ? data.members.join(', ') : id),
+        members: data.members || [],
+        createdBy: data.createdBy || null,
+        lastUpdated: data.lastUpdated || null
+      };
+    });
+    renderRooms();
+  }, err => {
+    console.error('roomsMeta snapshot failed', err);
+  });
+}
+
+/* ======= Render rooms sidebar ======= */
+function renderRooms(){
+  roomsListEl.innerHTML = '';
+  // Global first
+  const keys = Object.keys(roomsMap);
+  // sort: Global first otherwise by lastUpdated if available
+  keys.sort((a,b)=>{
+    if(a==='Global') return -1;
+    if(b==='Global') return 1;
+    // sort by label (stable)
+    return (roomsMap[a].label || a).localeCompare(roomsMap[b].label || b);
   });
 
-  // Load chat list
-  function loadChats() {
-    const list = document.getElementById("chatList");
-    list.innerHTML = `<div class="chat-item" onclick="switchRoom('global')">🌍 Global Chat</div>`;
-    db.collection("privateChats").where("members", "array-contains", currentUser)
-      .onSnapshot(snapshot => {
-        snapshot.docChanges().forEach(change => {
-          if (change.type === "added") {
-            const roomId = change.doc.id;
-            const chatItem = document.createElement("div");
-            chatItem.className = "chat-item";
-            chatItem.innerText = "🔒 " + roomId.replaceAll("_", " & ");
-            chatItem.onclick = () => switchRoom(roomId, true);
-            list.appendChild(chatItem);
-          }
-        });
+  for(const id of keys){
+    const meta = roomsMap[id];
+    const btn = document.createElement('button');
+    btn.className = 'room-btn' + (id === currentRoom ? ' active' : '');
+    btn.innerHTML = `<span class="label">${meta.label}</span><span class="badge" style="display:none"></span>`;
+    btn.onclick = ()=> switchRoom(id);
+    roomsListEl.appendChild(btn);
+  }
+}
+
+/* ======= Switch room and subscribe to messages ======= */
+let messagesUnsubscribe = null;
+function switchRoom(roomId){
+  // unsubscribe previous
+  if(messagesUnsubscribe) { messagesUnsubscribe(); messagesUnsubscribe = null; messageIds.clear(); }
+
+  currentRoom = roomId;
+  renderRooms();
+
+  // header
+  const meta = roomsMap[roomId] || { label: roomId, members: (roomId==='Global'?[]:[]) };
+  titleEl.textContent = (currentUser?.username || 'Guest') + ' • ' + (meta.label || roomId);
+  subtitleEl.textContent = (roomId === 'Global') ? 'Public chat (everyone)' : `Members: ${meta.members ? meta.members.join(', ') : ''}`;
+  membersListEl.textContent = (meta.members && meta.members.length) ? meta.members.join(', ') : '';
+
+  // show delete room if non-Global and user is member
+  if(roomId !== 'Global' && currentUser && meta.members && meta.members.includes(currentUser.username)){
+    deleteRoomBtn.style.display = 'inline-block';
+  } else {
+    deleteRoomBtn.style.display = 'none';
+  }
+
+  // clear content
+  contentEl.innerHTML = '';
+  messageIds.clear();
+
+  // messages collection path
+  const messagesCol = collection(db, 'rooms', roomId, 'messages');
+  // order by clientTime so messages appear instantly; serverTimestamp also written for server time
+  const q = orderBy ? query(messagesCol, orderBy('clientTime','asc')) : null;
+
+  // subscribe
+  messagesUnsubscribe = onSnapshot(messagesCol, async (snap) => {
+    // Note: use incremental docChanges once initial loaded for performance
+    if(snap.metadata.hasPendingWrites === undefined){
+      // fallback: render all
+      contentEl.innerHTML = '';
+      snap.forEach(d => {
+        renderMessage(d.id, d.data());
       });
-  }
+      contentEl.scrollTop = contentEl.scrollHeight;
+      return;
+    }
 
-  // Switch room
-  function switchRoom(roomId, isPrivate=false) {
-    currentRoom = roomId;
-    document.getElementById("messages").innerHTML = "";
-    loadMessages(roomId, isPrivate);
-  }
-
-  // Load messages
-  function loadMessages(roomId, isPrivate=false) {
-    let ref = isPrivate ? db.collection("privateChats").doc(roomId).collection("messages") :
-                          db.collection("global");
-    ref.orderBy("timestamp").onSnapshot(snapshot => {
-      const messages = document.getElementById("messages");
-      messages.innerHTML = "";
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        const msg = document.createElement("div");
-        msg.className = "msg " + (data.sender === currentUser ? "mine" : "theirs");
-        msg.innerText = `${data.sender}: ${data.text}`;
-        messages.appendChild(msg);
+    // If we have no messages in UI yet, initial load -> render full snapshot ordered by clientTime
+    if(messageIds.size === 0){
+      contentEl.innerHTML = '';
+      const docs = snap.docs.slice().sort((a,b)=>{
+        const A = a.data().clientTime || 0;
+        const B = b.data().clientTime || 0;
+        return A - B;
       });
-      messages.scrollTop = messages.scrollHeight;
-    });
-  }
-
-  // Send message
-  function sendMessage() {
-    const text = document.getElementById("messageInput").value;
-    if (!text) return;
-    const msg = {
-      sender: currentUser,
-      text,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    };
-    if (currentRoom === "global") {
-      db.collection("global").add(msg);
+      docs.forEach(d => {
+        renderMessage(d.id, d.data());
+      });
+      contentEl.scrollTop = contentEl.scrollHeight;
     } else {
-      db.collection("privateChats").doc(currentRoom).collection("messages").add(msg);
+      // incremental changes
+      snap.docChanges().forEach(change => {
+        if(change.type === 'added'){
+          if(!messageIds.has(change.doc.id)){
+            renderMessage(change.doc.id, change.doc.data());
+            contentEl.scrollTop = contentEl.scrollHeight;
+          }
+        } else if(change.type === 'removed'){
+          removeMessage(change.doc.id);
+        } else if(change.type === 'modified'){
+          // optional: update message text if edited (not implemented)
+        }
+      });
     }
-    document.getElementById("messageInput").value = "";
-  }
+  }, err => {
+    console.error('messages subscription error', err);
+  });
+}
 
-  // New private chat
-  document.getElementById("newChatBtn").onclick = () => {
-    const other = prompt("Enter username of user to chat with:");
-    if (!other || other === currentUser) return;
-    const roomId = [currentUser, other].sort().join("_");
-    db.collection("privateChats").doc(roomId).set({
-      members: [currentUser, other]
+/* ======= Render a single message DOM (id + data) ======= */
+function renderMessage(id, m){
+  if(messageIds.has(id)) return;
+  messageIds.add(id);
+
+  const wrap = document.createElement('div');
+  wrap.dataset.id = id;
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble ' + ((m.from === (currentUser?.username||sessionStorage.getItem('username')||'Guest')) ? 'me' : 'them');
+  bubble.textContent = m.text;
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const time = m.clientTime ? new Date(m.clientTime).toLocaleTimeString() : (m.createdAt ? m.createdAt.toDate().toLocaleTimeString() : '');
+  meta.textContent = `${m.from} • ${time}`;
+
+  wrap.appendChild(bubble);
+  wrap.appendChild(meta);
+  contentEl.appendChild(wrap);
+}
+
+/* ======= Remove a message DOM by id ======= */
+function removeMessage(id){
+  const el = contentEl.querySelector(`[data-id="${id}"]`);
+  if(el) el.remove();
+  messageIds.delete(id);
+}
+
+/* ======= Send message (requires login) ======= */
+sendBtn.addEventListener('click', sendMessage);
+msgInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') sendMessage(); });
+
+async function sendMessage(){
+  if(!currentUser){
+    alert('Please log in to send messages.');
+    return;
+  }
+  const text = msgInput.value.trim();
+  if(!text) return;
+  const payload = {
+    text,
+    from: currentUser.username,
+    uid: currentUser.uid,
+    clientTime: Date.now(),
+    createdAt: serverTimestamp()
+  };
+  try {
+    await addDoc(collection(db,'rooms', currentRoom, 'messages'), payload);
+    msgInput.value = '';
+  } catch(e){
+    console.error('send failed', e);
+    alert('Send failed: ' + (e.message || e));
+  }
+}
+
+/* ======= Create new private/group chat modal ======= */
+newChatBtn.addEventListener('click', async () => {
+  if(!currentUser){ alert('Log in to create private/group chats'); return; }
+  openCreateModal();
+});
+createCancel.addEventListener('click', ()=> hideModal(createModal));
+
+let allUsersCache = []; // array of { uid, username }
+async function loadAllUsers(){
+  usersContainer.innerHTML = 'Loading...';
+  try {
+    const snap = await getDocs(collection(db,'users'));
+    allUsersCache = snap.docs.map(d => ({ uid: d.id, username: d.data().username || d.data().email.split('@')[0] }));
+    renderUsersSearch('');
+  } catch(e){
+    console.error('failed loading users', e);
+    usersContainer.innerHTML = 'Failed to load users';
+  }
+}
+refreshUsersBtn.addEventListener('click', loadAllUsers);
+
+function renderUsersSearch(filter){
+  usersContainer.innerHTML = '';
+  const filterLower = (filter||'').toLowerCase();
+  const list = allUsersCache.filter(u => u.username && u.username.toLowerCase().includes(filterLower) && u.username !== (currentUser?.username || sessionStorage.getItem('username')));
+  for(const u of list){
+    const div = document.createElement('div');
+    div.className = 'user-item';
+    const left = document.createElement('div'); left.textContent = u.username;
+    const right = document.createElement('div');
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.username = u.username; cb.dataset.uid = u.uid;
+    right.appendChild(cb);
+    div.appendChild(left); div.appendChild(right);
+    usersContainer.appendChild(div);
+  }
+}
+userSearch.addEventListener('input', ()=> renderUsersSearch(userSearch.value));
+
+async function openCreateModal(){
+  createMsg.textContent = '';
+  groupLabel.value = '';
+  loadAllUsers().then(()=> showModal(createModal));
+}
+
+createConfirm.addEventListener('click', async ()=>{
+  createMsg.textContent = '';
+  const checked = Array.from(usersContainer.querySelectorAll('input[type=checkbox]:checked'));
+  const selectedUsernames = checked.map(c=>c.dataset.username);
+  if(selectedUsernames.length === 0){
+    createMsg.textContent = 'Select at least one other user';
+    return;
+  }
+  if(selectedUsernames.length + 1 > 6){
+    createMsg.textContent = 'Maximum 6 members total';
+    return;
+  }
+  const members = Array.from(new Set([...(selectedUsernames || []), currentUser.username]));
+  const roomId = makeRoomId(members);
+  const label = groupLabel.value.trim() || members.join(', ');
+  try {
+    // create or update roomsMeta doc
+    await setDoc(doc(db,'roomsMeta', roomId), {
+      label,
+      members,
+      createdBy: currentUser.username,
+      lastUpdated: serverTimestamp()
     }, { merge: true });
-    switchRoom(roomId, true);
-  };
+    // ensure roomsMap and UI updated
+    roomsMap[roomId] = { label, members };
+    renderRooms();
+    hideModal(createModal);
+    switchRoom(roomId);
+  } catch(e){
+    console.error('create room failed', e);
+    createMsg.textContent = 'Create failed: ' + (e.message || e);
+  }
+});
 
-  // Delete private chat
-  function deletePrivateChat(roomId) {
-    if (confirm("Delete this private chat?")) {
-      db.collection("privateChats").doc(roomId).delete();
-      switchRoom("global");
+/* ======= Delete a private/group chat (meta + messages) ======= */
+deleteRoomBtn.addEventListener('click', async ()=>{
+  if(!currentUser) return;
+  if(!confirm('Delete this chat for everyone? This will remove the room metadata and all messages.')) return;
+  const roomId = currentRoom;
+  try {
+    // delete messages in batches
+    await deleteMessagesInRoom(roomId);
+    // delete roomsMeta doc
+    await deleteDoc(doc(db,'roomsMeta', roomId));
+    // remove locally and go to Global
+    delete roomsMap[roomId];
+    renderRooms();
+    switchRoom('Global');
+    alert('Chat deleted');
+  } catch(e){
+    console.error('delete room error', e);
+    alert('Delete failed: ' + (e.message || e));
+  }
+});
+
+async function deleteMessagesInRoom(roomId){
+  const messagesCol = collection(db,'rooms',roomId,'messages');
+  while(true){
+    const q = query(messagesCol, orderBy('clientTime','asc'), limit(100));
+    const snap = await getDocs(q);
+    if(snap.empty) break;
+    const batch = writeBatch(db);
+    snap.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+    // continue until none left
+  }
+}
+
+/* ======= Settings modal behavior ======= */
+settingsBtn.addEventListener('click', ()=> showModal(settingsModal));
+closeSettings.addEventListener('click', ()=> hideModal(settingsModal));
+closeSettingsBtn.addEventListener('click', ()=> hideModal(settingsModal));
+themeSelect.addEventListener('change', ()=>{
+  const v = themeSelect.value;
+  document.body.setAttribute('data-theme', v);
+  localStorage.setItem('theme', v);
+});
+(function initTheme(){
+  const saved = localStorage.getItem('theme') || 'light';
+  document.body.setAttribute('data-theme', saved);
+  themeSelect.value = saved;
+})();
+
+/* ======= Load Global immediately (for all users) ======= */
+(async function subscribeGlobal(){
+  // show Global as default
+  roomsMap['Global'] = { label: '🌍 Global' };
+  renderRooms();
+  // subscribe to Global messages (visible to all)
+  const globalCol = collection(db,'rooms','Global','messages');
+  const q = query(globalCol, orderBy('clientTime','asc'));
+  onSnapshot(q, snap => {
+    // if currently in Global, render; otherwise don't force
+    if(currentRoom !== 'Global') return;
+    // clear and render current snapshot (initial + later updates)
+    if(messageIds.size === 0){
+      contentEl.innerHTML = '';
+      snap.forEach(d => renderMessage(d.id, d.data()));
+      contentEl.scrollTop = contentEl.scrollHeight;
+    } else {
+      snap.docChanges().forEach(change => {
+        if(change.type === 'added'){
+          if(!messageIds.has(change.doc.id)) renderMessage(change.doc.id, change.doc.data());
+        } else if(change.type === 'removed'){
+          removeMessage(change.doc.id);
+        }
+      });
     }
-  }
+  });
+})();
 
-  // Settings
-  function openSettings() {
-    document.getElementById("settingsModal").style.display = "flex";
+/* ======= Utility: load roomsMeta if switching to a room that's not in roomsMap ======= */
+async function ensureRoomMeta(roomId){
+  if(roomsMap[roomId]) return roomsMap[roomId];
+  try {
+    const r = await getDoc(doc(db,'roomsMeta', roomId));
+    if(r.exists()){
+      const data = r.data();
+      roomsMap[roomId] = { label: data.label || roomId, members: data.members || [] };
+      renderRooms();
+      return roomsMap[roomId];
+    } else {
+      // unknown room, create temp meta
+      roomsMap[roomId] = { label: roomId, members: [] };
+      renderRooms();
+      return roomsMap[roomId];
+    }
+  } catch(e){
+    console.error('ensureRoomMeta failed', e);
+    roomsMap[roomId] = { label: roomId, members: [] };
+    renderRooms();
+    return roomsMap[roomId];
   }
-  document.getElementById("closeSettings").onclick = () => {
-    document.getElementById("settingsModal").style.display = "none";
-  };
-  const themeSelect = document.getElementById("themeSelect");
-  themeSelect.onchange = () => {
-    document.documentElement.dataset.theme = themeSelect.value;
-    localStorage.setItem("theme", themeSelect.value);
-  };
-  const savedTheme = localStorage.getItem("theme");
-  if (savedTheme) {
-    document.documentElement.dataset.theme = savedTheme;
-    themeSelect.value = savedTheme;
-  }
+}
 
-  // Logout
-  function logout() {
-    auth.signOut();
+/* ======= If user visits a private roomId via URL param ?room=..., open it (optional) ======= */
+(function openRoomFromQuery(){
+  const urlp = new URLSearchParams(location.search);
+  const r = urlp.get('room');
+  if(r){
+    // decode room id if needed
+    (async ()=>{ await ensureRoomMeta(r); switchRoom(r); })();
   }
+})();
+
+/* ======= Initial UI state: disable controls until auth known (onAuthStateChanged handles enabling) ======= */
+sendBtn.disabled = true;
+msgInput.disabled = true;
+newChatBtn.disabled = true;
+
+/* ======= Make sure when you first open chat.html it doesn't redirect (we do nothing here) ======= */
 </script>
 </body>
 </html>
