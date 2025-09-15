@@ -4,15 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Hybrid Chat — Live</title>
-
-<!-- Minimal professional styling (responsive) -->
 <style>
 :root{
   --bg:#f5f7fa; --sidebar:#1f2937; --accent:#2563eb; --card:#ffffff; --text:#0f172a;
-  --self:#0ea5a4; --other:#e6e7ea;
+  --self:#0ea5a4; --other:#eef2f7;
 }
 [data-theme="dark"]{
-  --bg:#0b1220; --sidebar:#0b1220; --accent:#2563eb; --card:#0f1724; --text:#e6eef6;
+  --bg:#07111a; --sidebar:#0b1220; --accent:#2563eb; --card:#0f1724; --text:#e6eef6;
   --self:#0ea5a4; --other:#1f2937;
 }
 *{box-sizing:border-box}
@@ -23,37 +21,34 @@ html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,
 .rooms{flex:1;overflow:auto;padding-bottom:8px}
 .room-btn{display:flex;align-items:center;justify-content:space-between;padding:8px;border-radius:8px;background:transparent;border:0;color:#fff;margin-bottom:8px;cursor:pointer;font-weight:600}
 .room-btn.active{background:rgba(255,255,255,0.06)}
-.controls{display:flex;flex-direction:column;gap:8px}
+.room-label{flex:1;text-align:left;padding-right:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.controls{display:flex;flex-direction:column;gap:8px;margin-top:8px}
 .btn{padding:10px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer;font-weight:700}
-.btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.08);color:#fff}
+.btn-ghost{padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff;cursor:pointer}
 .main{flex:1;display:flex;flex-direction:column;background:var(--card);border-radius:10px;overflow:hidden}
 .header{display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--accent);color:#fff}
 .header .left{display:flex;flex-direction:column}
-.header .title{font-weight:800}
-.header .subtitle{font-size:12px;opacity:.9}
+.title{font-weight:800}
+.subtitle{font-size:12px;opacity:.95}
 .content{flex:1;overflow:auto;padding:16px;background:linear-gradient(180deg, rgba(0,0,0,0.02), transparent)}
-.bubble{display:inline-block;padding:10px 12px;border-radius:12px;margin:8px 0;max-width:75%;word-break:break-word}
-.bubble.me{background:var(--self);color:#fff;float:right;border-bottom-right-radius:4px}
-.bubble.them{background:var(--other);color:var(--text);float:left;border-bottom-left-radius:4px}
-.meta{font-size:11px;opacity:.8;margin-top:6px}
-.footer{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(0,0,0,0.06);align-items:center}
+.message-row{display:flex;margin:8px 0;clear:both}
+.message-row.me{justify-content:flex-end}
+.bubble{padding:10px 14px;border-radius:14px;max-width:72%;word-break:break-word;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.bubble.me{background:var(--self);color:#fff;border-bottom-right-radius:6px}
+.bubble.them{background:var(--other);color:var(--text);border-bottom-left-radius:6px}
+.msg-meta{font-size:11px;opacity:.75;margin-top:6px}
+.footer{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(0,0,0,0.06);align-items:center;background:linear-gradient(180deg,transparent,rgba(0,0,0,0.02))}
 .input{flex:1;padding:10px;border-radius:10px;border:1px solid #e6eef6}
-.icon-btn{background:transparent;border:0;cursor:pointer;padding:8px}
 .small{font-size:13px;padding:8px 10px;border-radius:8px}
-.top-actions{display:flex;gap:8px;align-items:center}
-
-/* Modal */
-.modal{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center}
-.panel{background:var(--card);padding:16px;border-radius:10px;min-width:320px;max-width:90%;color:var(--text)}
+.modal{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;z-index:60}
+.panel{background:var(--card);padding:16px;border-radius:10px;min-width:320px;max-width:92%;color:var(--text)}
 .user-list{max-height:260px;overflow:auto;border:1px solid #eee;padding:8px;border-radius:8px;margin:8px 0}
 .user-item{display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid #f0f0f0}
 .badge{background:#ff5252;color:#fff;padding:4px 8px;border-radius:999px;font-size:12px}
-.footer .note{font-size:12px;color:rgba(0,0,0,0.45)}
 @media(max-width:800px){
-  .sidebar{width:88px;padding:8px}
-  .room-btn .label{display:none}
-  .header{padding:10px}
-  .content{padding:10px}
+  .sidebar{width:92px;padding:8px}
+  .room-label{display:none}
+  .title{font-size:16px}
 }
 </style>
 </head>
@@ -62,16 +57,16 @@ html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,
 <div class="container">
   <!-- Sidebar -->
   <aside class="sidebar">
-    <h3>Chats</h3>
+    <h3>Hybrid Chat</h3>
 
     <div class="rooms" id="roomsList">
-      <!-- rooms will be injected here -->
+      <!-- rooms injected -->
     </div>
 
     <div class="controls">
       <button id="newChatBtn" class="btn" title="New private/group chat">+ New Chat</button>
       <button id="refreshUsers" class="btn-ghost">Refresh users</button>
-      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+      <div style="display:flex;gap:8px">
         <button id="settingsBtn" class="btn-ghost" style="flex:1">Settings</button>
         <button id="loginBtn" class="btn-ghost" style="flex:1">Login</button>
       </div>
@@ -85,18 +80,17 @@ html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,
         <div id="title" class="title">—</div>
         <div id="subtitle" class="subtitle">—</div>
       </div>
-      <div class="top-actions">
+      <div style="display:flex;gap:8px;align-items:center">
         <div id="membersList" style="font-size:13px;opacity:.95"></div>
-        <button id="deleteRoomBtn" class="icon-btn small" title="Delete room" style="display:none">Delete Chat</button>
+        <button id="deleteRoomBtn" class="small" style="display:none;background:transparent;border:1px solid rgba(255,255,255,0.12);color:#fff">Delete</button>
       </div>
     </div>
 
-    <div id="content" class="content"></div>
+    <div id="content" class="content" role="log" aria-live="polite"></div>
 
     <div class="footer">
       <input id="msgInput" class="input" placeholder="Type a message…" disabled />
-      <button id="sendBtn" class="btn" disabled>Send</button>
-      <div style="width:8px"></div>
+      <button id="sendBtn" class="btn small" disabled>Send</button>
     </div>
   </main>
 </div>
@@ -105,7 +99,7 @@ html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,
 <div id="createModal" class="modal" aria-hidden="true">
   <div class="panel">
     <h3>Create private/group chat (max 6)</h3>
-    <div style="font-size:13px;color:rgba(0,0,0,0.6)">Search and select up to 5 other users:</div>
+    <div style="font-size:13px;color:rgba(0,0,0,0.6)">Select up to 5 other users (creator + up to 5 => max 6):</div>
     <input id="userSearch" placeholder="Search username..." style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;margin-top:8px" />
     <div id="usersContainer" class="user-list"></div>
     <input id="groupLabel" placeholder="Optional chat label" style="width:100%;padding:8px;border-radius:8px;border:1px solid #ddd;margin-top:8px" />
@@ -136,16 +130,16 @@ html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,
 </div>
 
 <script type="module">
-/* ======= Firebase imports (modular) ======= */
+/* ===== Firebase (modular v12) ===== */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, setDoc, addDoc,
   query, where, orderBy, onSnapshot, serverTimestamp, getDocs,
-  writeBatch, limit, deleteDoc
+  writeBatch, deleteDoc, limit
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-/* ======= CONFIG — use your project config (kept same as yours) ======= */
+/* ====== CONFIG - use your project's config ====== */
 const firebaseConfig = {
   apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
   authDomain: "hybridchat-8a96c.firebaseapp.com",
@@ -158,7 +152,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-/* ======= UI refs ======= */
+/* ===== UI refs ===== */
 const roomsListEl = document.getElementById('roomsList');
 const contentEl = document.getElementById('content');
 const titleEl = document.getElementById('title');
@@ -183,245 +177,274 @@ const loginBtn = document.getElementById('loginBtn');
 const refreshUsersBtn = document.getElementById('refreshUsers');
 const deleteRoomBtn = document.getElementById('deleteRoomBtn');
 
-/* ======= App state ======= */
-let currentUser = null;         // { uid, email, username } or null
-let currentRoom = 'Global';     // 'Global' or roomId
-let roomsMap = { Global: { label: '🌍 Global' } }; // roomId => meta
+/* ===== App state ===== */
+let currentUser = null; // { uid, email, username }
+let currentRoom = 'Global';
+let roomsMap = { Global: { label: '🌍 Global', members: [] } }; // roomId -> meta
 let roomsUnsub = null;
 let messagesUnsub = null;
-const messageIds = new Set(); // message ids for current room
+let messagesList = []; // ordered array of message ids for currentRoom
+let messagesMap = {};  // id -> data
+let messageElements = {}; // id -> DOM element
 
-/* ======= Helpers ======= */
-function sanitizeForId(name){
-  // replace whitespace with underscore, remove slashes
-  return name.replace(/\s+/g,'_').replace(/\//g,'-');
+/* ===== Helpers ===== */
+function sanitize(name){ return name.replace(/\s+/g,'_').replace(/[^\w\-]/g,'').toLowerCase(); }
+function makeRoomId(usernames){ return usernames.map(s=>sanitize(s)).sort().join('__'); }
+function show(el){ el.style.display = 'flex'; el.setAttribute('aria-hidden','false'); }
+function hide(el){ el.style.display = 'none'; el.setAttribute('aria-hidden','true'); }
+function fmtTime(msOrDate){
+  if(!msOrDate) return '';
+  const d = (typeof msOrDate === 'number') ? new Date(msOrDate) : (msOrDate.toDate ? msOrDate.toDate() : new Date(msOrDate));
+  return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 }
-function makeRoomId(usernames){
-  // usernames = array of username strings (already trimmed)
-  const arr = usernames.map(s=>sanitizeForId(s)).sort();
-  return arr.join('___'); // stable doc id
-}
-function showModal(el){ el.style.display='flex' }
-function hideModal(el){ el.style.display='none' }
 
-/* ======= Auth behavior (no redirect) ======= */
-onAuthStateChanged(auth, async (u) => {
+/* ===== Auth state (no redirect) ===== */
+onAuthStateChanged(auth, async (u)=>{
   if(u){
-    // load or create user doc to ensure canonical username
+    // ensure users/{uid} doc exists with username
     try {
-      const uDocRef = doc(db, 'users', u.uid);
-      const uSnap = await getDoc(uDocRef);
+      const uRef = doc(db,'users', u.uid);
+      const uSnap = await getDoc(uRef);
       let username;
       if(uSnap.exists()){
-        username = uSnap.data().username || (u.displayName || u.email.split('@')[0]);
-        // make sure doc has username
-        await setDoc(uDocRef, { username, email: u.email }, { merge: true });
+        username = uSnap.data().username || u.displayName || u.email.split('@')[0];
+        await setDoc(uRef, { username, email: u.email }, { merge: true });
       } else {
         username = u.displayName || u.email.split('@')[0];
-        await setDoc(uDocRef, { username, email: u.email, createdAt: serverTimestamp() });
+        await setDoc(uRef, { username, email: u.email, createdAt: serverTimestamp() });
       }
       currentUser = { uid: u.uid, email: u.email, username };
       sessionStorage.setItem('username', username);
-    } catch(e){
-      console.error('Failed to load user doc', e);
-      // fallback to auth displayName / email prefix
+    } catch(err){
+      console.error('user doc error', err);
       currentUser = { uid: u.uid, email: u.email, username: u.displayName || u.email.split('@')[0] };
+      sessionStorage.setItem('username', currentUser.username);
     }
 
-    // enable UI controls that require login
+    // enable UI
     sendBtn.disabled = false;
     msgInput.disabled = false;
     newChatBtn.disabled = false;
     loginBtn.textContent = 'Logout';
-    loginBtn.onclick = async () => { await signOut(auth); location.reload(); };
+    loginBtn.onclick = async ()=>{ await signOut(auth); location.reload(); };
 
-    // subscribe to rooms that include this username
+    // subscribe rooms for this user
     subscribeRoomsForUser(currentUser.username);
+    // Default to Global
+    switchRoom('Global');
   } else {
-    // not logged in — allow viewing Global, but disable creation/sending
+    // not logged in
     currentUser = null;
     sendBtn.disabled = true;
     msgInput.disabled = true;
     newChatBtn.disabled = true;
-    loginBtn.textContent = 'Login / Signup';
-    loginBtn.onclick = ()=> { window.location.href = 'login.html'; };
+    loginBtn.textContent = 'Login / Sign up';
+    loginBtn.onclick = ()=> window.location.href = 'login.html';
+
     // show only Global
-    roomsMap = { Global: { label: '🌍 Global' } };
+    roomsMap = { Global: { label: '🌍 Global', members: [] } };
     renderRooms();
     switchRoom('Global');
-    // don't subscribe to roomsMeta
+
     if(roomsUnsub){ roomsUnsub(); roomsUnsub = null; }
   }
 
-  // make sure theme from localStorage applied
-  const saved = localStorage.getItem('theme');
-  if(saved) { document.body.setAttribute('data-theme', saved); themeSelect.value = saved; }
+  // apply saved theme
+  const saved = localStorage.getItem('theme') || 'light';
+  document.body.setAttribute('data-theme', saved);
+  themeSelect.value = saved;
 });
 
-/* ======= Rooms (meta) subscription for logged-in user ======= */
+/* ===== Rooms subscription for a username ===== */
 function subscribeRoomsForUser(username){
-  // unsubscribe existing
   if(roomsUnsub) roomsUnsub();
-
-  // Always keep Global
-  roomsMap = { Global: { label: '🌍 Global' } };
+  // keep Global
+  roomsMap = { Global: { label: '🌍 Global', members: [] } };
   renderRooms();
 
-  // Query roomsMeta where members array contains username
+  // listen for rooms where members array contains this username
   const q = query(collection(db,'roomsMeta'), where('members','array-contains', username));
-  roomsUnsub = onSnapshot(q, snap => {
-    snap.forEach(docSnap => {
-      const id = docSnap.id;
-      const data = docSnap.data();
-      // store meta
-      roomsMap[id] = {
-        label: data.label || (data.members ? data.members.join(', ') : id),
-        members: data.members || [],
-        createdBy: data.createdBy || null,
-        lastUpdated: data.lastUpdated || null
-      };
+  roomsUnsub = onSnapshot(q, snap=>{
+    snap.docChanges().forEach(change=>{
+      const id = change.doc.id;
+      if(change.type === 'removed'){
+        delete roomsMap[id];
+      } else {
+        const d = change.doc.data();
+        roomsMap[id] = { label: d.label || id, members: d.members || [], createdBy: d.createdBy || null, lastUpdated: d.lastUpdated || null };
+      }
     });
     renderRooms();
-  }, err => {
-    console.error('roomsMeta snapshot failed', err);
-  });
+  }, err => console.error('roomsMeta snapshot error', err));
 }
 
-/* ======= Render rooms sidebar ======= */
+/* ===== Render rooms list ===== */
 function renderRooms(){
   roomsListEl.innerHTML = '';
-  // Global first
-  const keys = Object.keys(roomsMap);
-  // sort: Global first otherwise by lastUpdated if available
-  keys.sort((a,b)=>{
+  const keys = Object.keys(roomsMap).sort((a,b)=>{
     if(a==='Global') return -1;
     if(b==='Global') return 1;
-    // sort by label (stable)
     return (roomsMap[a].label || a).localeCompare(roomsMap[b].label || b);
   });
-
-  for(const id of keys){
+  keys.forEach(id=>{
     const meta = roomsMap[id];
     const btn = document.createElement('button');
     btn.className = 'room-btn' + (id === currentRoom ? ' active' : '');
-    btn.innerHTML = `<span class="label">${meta.label}</span><span class="badge" style="display:none"></span>`;
+    btn.innerHTML = `<span class="room-label">${meta.label}</span>`;
     btn.onclick = ()=> switchRoom(id);
     roomsListEl.appendChild(btn);
-  }
+  });
 }
 
-/* ======= Switch room and subscribe to messages ======= */
-let messagesUnsubscribe = null;
-function switchRoom(roomId){
-  // unsubscribe previous
-  if(messagesUnsubscribe) { messagesUnsubscribe(); messagesUnsubscribe = null; messageIds.clear(); }
+/* ===== Switch room: unsub old messages, subscribe new ===== */
+async function switchRoom(roomId){
+  // if roomId meta not known and not Global, attempt to fetch metadata
+  if(roomId !== 'Global' && !roomsMap[roomId]){
+    try{
+      const metaSnap = await getDoc(doc(db,'roomsMeta',roomId));
+      if(metaSnap.exists()) roomsMap[roomId] = metaSnap.data();
+      else roomsMap[roomId] = { label: roomId, members: [] };
+    } catch(e){ roomsMap[roomId] = { label: roomId, members: [] }; }
+    renderRooms();
+  }
 
+  // unsubscribe messages
+  if(messagesUnsub){ messagesUnsub(); messagesUnsub = null; }
+  messagesList = []; messagesMap = {}; messageElements = {};
   currentRoom = roomId;
   renderRooms();
 
-  // header
-  const meta = roomsMap[roomId] || { label: roomId, members: (roomId==='Global'?[]:[]) };
+  const meta = roomsMap[roomId] || { label: roomId, members: [] };
   titleEl.textContent = (currentUser?.username || 'Guest') + ' • ' + (meta.label || roomId);
-  subtitleEl.textContent = (roomId === 'Global') ? 'Public chat (everyone)' : `Members: ${meta.members ? meta.members.join(', ') : ''}`;
+  subtitleEl.textContent = roomId === 'Global' ? 'Public chat — visible to everyone' : `Members: ${meta.members ? meta.members.join(', ') : ''}`;
   membersListEl.textContent = (meta.members && meta.members.length) ? meta.members.join(', ') : '';
+  deleteRoomBtn.style.display = (roomId !== 'Global' && currentUser && meta.members && meta.members.includes(currentUser.username)) ? 'inline-block' : 'none';
 
-  // show delete room if non-Global and user is member
-  if(roomId !== 'Global' && currentUser && meta.members && meta.members.includes(currentUser.username)){
-    deleteRoomBtn.style.display = 'inline-block';
-  } else {
-    deleteRoomBtn.style.display = 'none';
-  }
-
-  // clear content
+  // clear content area
   contentEl.innerHTML = '';
-  messageIds.clear();
 
-  // messages collection path
-  const messagesCol = collection(db, 'rooms', roomId, 'messages');
-  // order by clientTime so messages appear instantly; serverTimestamp also written for server time
-  const q = orderBy ? query(messagesCol, orderBy('clientTime','asc')) : null;
-
-  // subscribe
-  messagesUnsubscribe = onSnapshot(messagesCol, async (snap) => {
-    // Note: use incremental docChanges once initial loaded for performance
-    if(snap.metadata.hasPendingWrites === undefined){
-      // fallback: render all
-      contentEl.innerHTML = '';
-      snap.forEach(d => {
-        renderMessage(d.id, d.data());
-      });
-      contentEl.scrollTop = contentEl.scrollHeight;
-      return;
-    }
-
-    // If we have no messages in UI yet, initial load -> render full snapshot ordered by clientTime
-    if(messageIds.size === 0){
-      contentEl.innerHTML = '';
+  // subscribe to messages collection
+  const messagesCol = collection(db,'rooms',roomId,'messages');
+  const q = query(messagesCol, orderBy('clientTime','asc'));
+  messagesUnsub = onSnapshot(q, snap=>{
+    // initial full load if messagesList empty
+    if(messagesList.length === 0){
       const docs = snap.docs.slice().sort((a,b)=>{
         const A = a.data().clientTime || 0;
         const B = b.data().clientTime || 0;
         return A - B;
       });
-      docs.forEach(d => {
-        renderMessage(d.id, d.data());
+      docs.forEach(d=> {
+        const id = d.id; const data = d.data();
+        insertMessageOrdered(id, data);
       });
-      contentEl.scrollTop = contentEl.scrollHeight;
+      scrollToBottom();
     } else {
-      // incremental changes
-      snap.docChanges().forEach(change => {
-        if(change.type === 'added'){
-          if(!messageIds.has(change.doc.id)){
-            renderMessage(change.doc.id, change.doc.data());
-            contentEl.scrollTop = contentEl.scrollHeight;
+      // incremental
+      snap.docChanges().forEach(ch=>{
+        if(ch.type === 'added'){
+          if(!messagesMap[ch.doc.id]){
+            insertMessageOrdered(ch.doc.id, ch.doc.data());
+            scrollToBottom();
           }
-        } else if(change.type === 'removed'){
-          removeMessage(change.doc.id);
-        } else if(change.type === 'modified'){
-          // optional: update message text if edited (not implemented)
+        } else if(ch.type === 'removed'){
+          removeMessage(ch.doc.id);
+        } else if(ch.type === 'modified'){
+          updateMessage(ch.doc.id, ch.doc.data());
         }
       });
     }
-  }, err => {
-    console.error('messages subscription error', err);
-  });
+  }, err => console.error('messages onSnapshot error', err));
 }
 
-/* ======= Render a single message DOM (id + data) ======= */
-function renderMessage(id, m){
-  if(messageIds.has(id)) return;
-  messageIds.add(id);
+/* ===== Insert message into in-memory lists and DOM in chronological order by clientTime ===== */
+function insertMessageOrdered(id, data){
+  if(messagesMap[id]) return;
+  const ts = data.clientTime || (data.createdAt && data.createdAt.toMillis && data.createdAt.toMillis()) || Date.now();
+  messagesMap[id] = {...data, clientTime: ts};
+  // binary search for index
+  let lo = 0, hi = messagesList.length;
+  while(lo < hi){
+    const mid = Math.floor((lo+hi)/2);
+    const midId = messagesList[mid];
+    const midTime = messagesMap[midId].clientTime || 0;
+    if(midTime <= ts) lo = mid+1; else hi = mid;
+  }
+  const index = lo;
+  messagesList.splice(index, 0, id);
+  // create DOM element and insert at index
+  const el = renderMessageDOM(id, messagesMap[id]);
+  messageElements[id] = el;
+  if(index >= contentEl.children.length){
+    contentEl.appendChild(el);
+  } else {
+    contentEl.insertBefore(el, contentEl.children[index]);
+  }
+}
 
-  const wrap = document.createElement('div');
-  wrap.dataset.id = id;
+/* ===== Create message DOM element ===== */
+function renderMessageDOM(id, m){
+  const row = document.createElement('div');
+  row.className = 'message-row ' + ((m.from === (currentUser?.username || sessionStorage.getItem('username') || 'Guest')) ? 'me' : 'them');
+  row.dataset.id = id;
+
   const bubble = document.createElement('div');
-  bubble.className = 'bubble ' + ((m.from === (currentUser?.username||sessionStorage.getItem('username')||'Guest')) ? 'me' : 'them');
-  bubble.textContent = m.text;
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  const time = m.clientTime ? new Date(m.clientTime).toLocaleTimeString() : (m.createdAt ? m.createdAt.toDate().toLocaleTimeString() : '');
-  meta.textContent = `${m.from} • ${time}`;
+  bubble.className = 'bubble ' + ((m.from === (currentUser?.username || sessionStorage.getItem('username') || 'Guest')) ? 'me' : 'them');
 
-  wrap.appendChild(bubble);
-  wrap.appendChild(meta);
-  contentEl.appendChild(wrap);
+  // header with username and maybe small badge for you
+  const header = document.createElement('div');
+  header.style.fontSize='13px';
+  header.style.fontWeight='700';
+  header.style.marginBottom='6px';
+  header.style.display='flex';
+  header.style.alignItems='center';
+  header.style.gap='8px';
+  header.textContent = m.from;
+
+  const text = document.createElement('div');
+  text.textContent = m.text;
+
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  meta.textContent = fmtTime(m.clientTime || m.createdAt);
+
+  bubble.appendChild(header);
+  bubble.appendChild(text);
+  bubble.appendChild(meta);
+
+  row.appendChild(bubble);
+  return row;
 }
 
-/* ======= Remove a message DOM by id ======= */
+/* ===== Remove & update helpers ===== */
 function removeMessage(id){
   const el = contentEl.querySelector(`[data-id="${id}"]`);
   if(el) el.remove();
-  messageIds.delete(id);
+  const idx = messagesList.indexOf(id);
+  if(idx !== -1) messagesList.splice(idx,1);
+  delete messagesMap[id];
+  delete messageElements[id];
+}
+function updateMessage(id, data){
+  messagesMap[id] = {...messagesMap[id], ...data};
+  // re-render element
+  const old = contentEl.querySelector(`[data-id="${id}"]`);
+  const newEl = renderMessageDOM(id, messagesMap[id]);
+  if(old && old.parentNode) old.parentNode.replaceChild(newEl, old);
+  messageElements[id] = newEl;
 }
 
-/* ======= Send message (requires login) ======= */
+/* ===== Scroll helper ===== */
+function scrollToBottom(){
+  requestAnimationFrame(()=> { contentEl.scrollTop = contentEl.scrollHeight; });
+}
+
+/* ====== Sending messages (clientTime + serverTimestamp) ====== */
 sendBtn.addEventListener('click', sendMessage);
-msgInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') sendMessage(); });
+msgInput.addEventListener('keydown', e => { if(e.key === 'Enter') sendMessage(); });
 
 async function sendMessage(){
-  if(!currentUser){
-    alert('Please log in to send messages.');
-    return;
-  }
+  if(!currentUser){ alert('Please log in to send messages.'); return; }
   const text = msgInput.value.trim();
   if(!text) return;
   const payload = {
@@ -435,206 +458,147 @@ async function sendMessage(){
     await addDoc(collection(db,'rooms', currentRoom, 'messages'), payload);
     msgInput.value = '';
   } catch(e){
-    console.error('send failed', e);
+    console.error('send error', e);
     alert('Send failed: ' + (e.message || e));
   }
 }
 
-/* ======= Create new private/group chat modal ======= */
-newChatBtn.addEventListener('click', async () => {
-  if(!currentUser){ alert('Log in to create private/group chats'); return; }
-  openCreateModal();
+/* ====== Create group/private chat ====== */
+newChatBtn.addEventListener('click', async ()=>{
+  if(!currentUser){ alert('Log in to create chats'); return; }
+  createMsg.textContent = '';
+  groupLabel.value = '';
+  await loadAllUsers();
+  renderUsers('');
+  show(createModal);
 });
-createCancel.addEventListener('click', ()=> hideModal(createModal));
+createCancel.addEventListener('click', ()=> hide(createModal));
+refreshUsersBtn.addEventListener('click', ()=> loadAllUsers());
 
-let allUsersCache = []; // array of { uid, username }
+let allUsers = []; // {uid, username}
 async function loadAllUsers(){
   usersContainer.innerHTML = 'Loading...';
-  try {
+  try{
     const snap = await getDocs(collection(db,'users'));
-    allUsersCache = snap.docs.map(d => ({ uid: d.id, username: d.data().username || d.data().email.split('@')[0] }));
-    renderUsersSearch('');
+    allUsers = snap.docs.map(d => ({ uid: d.id, username: d.data().username || d.data().email.split('@')[0] }));
+    renderUsers(userSearch.value || '');
   } catch(e){
-    console.error('failed loading users', e);
+    console.error('load users failed', e);
     usersContainer.innerHTML = 'Failed to load users';
   }
 }
-refreshUsersBtn.addEventListener('click', loadAllUsers);
-
-function renderUsersSearch(filter){
+function renderUsers(filter){
   usersContainer.innerHTML = '';
-  const filterLower = (filter||'').toLowerCase();
-  const list = allUsersCache.filter(u => u.username && u.username.toLowerCase().includes(filterLower) && u.username !== (currentUser?.username || sessionStorage.getItem('username')));
-  for(const u of list){
-    const div = document.createElement('div');
-    div.className = 'user-item';
-    const left = document.createElement('div'); left.textContent = u.username;
-    const right = document.createElement('div');
-    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.username = u.username; cb.dataset.uid = u.uid;
-    right.appendChild(cb);
-    div.appendChild(left); div.appendChild(right);
-    usersContainer.appendChild(div);
-  }
+  const f = (filter||'').toLowerCase();
+  allUsers.filter(u => u.username && u.username.toLowerCase().includes(f) && u.username !== (currentUser?.username || sessionStorage.getItem('username')) )
+    .forEach(u=>{
+      const div = document.createElement('div'); div.className='user-item';
+      const left = document.createElement('div'); left.textContent = u.username;
+      const right = document.createElement('div');
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.dataset.username = u.username; cb.dataset.uid = u.uid;
+      right.appendChild(cb);
+      div.appendChild(left); div.appendChild(right);
+      usersContainer.appendChild(div);
+    });
 }
-userSearch.addEventListener('input', ()=> renderUsersSearch(userSearch.value));
-
-async function openCreateModal(){
-  createMsg.textContent = '';
-  groupLabel.value = '';
-  loadAllUsers().then(()=> showModal(createModal));
-}
+userSearch.addEventListener('input', ()=> renderUsers(userSearch.value || ''));
 
 createConfirm.addEventListener('click', async ()=>{
   createMsg.textContent = '';
   const checked = Array.from(usersContainer.querySelectorAll('input[type=checkbox]:checked'));
-  const selectedUsernames = checked.map(c=>c.dataset.username);
-  if(selectedUsernames.length === 0){
-    createMsg.textContent = 'Select at least one other user';
-    return;
-  }
-  if(selectedUsernames.length + 1 > 6){
-    createMsg.textContent = 'Maximum 6 members total';
-    return;
-  }
-  const members = Array.from(new Set([...(selectedUsernames || []), currentUser.username]));
+  const selected = checked.map(c=>c.dataset.username);
+  if(selected.length === 0){ createMsg.textContent = 'Select at least one other user'; return; }
+  if(selected.length + 1 > 6){ createMsg.textContent = 'Max 6 members allowed'; return; }
+  const members = Array.from(new Set([...selected, currentUser.username]));
   const roomId = makeRoomId(members);
   const label = groupLabel.value.trim() || members.join(', ');
-  try {
-    // create or update roomsMeta doc
-    await setDoc(doc(db,'roomsMeta', roomId), {
-      label,
-      members,
-      createdBy: currentUser.username,
-      lastUpdated: serverTimestamp()
-    }, { merge: true });
-    // ensure roomsMap and UI updated
+  try{
+    await setDoc(doc(db,'roomsMeta', roomId), { label, members, createdBy: currentUser.username, lastUpdated: serverTimestamp() }, { merge: true });
     roomsMap[roomId] = { label, members };
     renderRooms();
-    hideModal(createModal);
+    hide(createModal);
     switchRoom(roomId);
-  } catch(e){
-    console.error('create room failed', e);
-    createMsg.textContent = 'Create failed: ' + (e.message || e);
-  }
+  } catch(e){ console.error('create room error', e); createMsg.textContent = 'Create failed'; }
 });
 
-/* ======= Delete a private/group chat (meta + messages) ======= */
+/* ===== Delete room (meta + messages) ===== */
 deleteRoomBtn.addEventListener('click', async ()=>{
   if(!currentUser) return;
-  if(!confirm('Delete this chat for everyone? This will remove the room metadata and all messages.')) return;
-  const roomId = currentRoom;
-  try {
+  if(currentRoom === 'Global'){ alert('Cannot delete Global'); return; }
+  if(!confirm('Delete this chat for everyone?')) return;
+  try{
     // delete messages in batches
-    await deleteMessagesInRoom(roomId);
-    // delete roomsMeta doc
-    await deleteDoc(doc(db,'roomsMeta', roomId));
-    // remove locally and go to Global
-    delete roomsMap[roomId];
+    await deleteAllMessagesInRoom(currentRoom);
+    await deleteDoc(doc(db,'roomsMeta', currentRoom));
+    delete roomsMap[currentRoom];
     renderRooms();
     switchRoom('Global');
-    alert('Chat deleted');
-  } catch(e){
-    console.error('delete room error', e);
-    alert('Delete failed: ' + (e.message || e));
-  }
+    alert('Deleted');
+  } catch(e){ console.error('delete room error', e); alert('Delete failed'); }
 });
 
-async function deleteMessagesInRoom(roomId){
+async function deleteAllMessagesInRoom(roomId){
   const messagesCol = collection(db,'rooms',roomId,'messages');
   while(true){
-    const q = query(messagesCol, orderBy('clientTime','asc'), limit(100));
-    const snap = await getDocs(q);
+    const qq = query(messagesCol, orderBy('clientTime','asc'), limit(100));
+    const snap = await getDocs(qq);
     if(snap.empty) break;
     const batch = writeBatch(db);
-    snap.forEach(d => batch.delete(d.ref));
+    snap.docs.forEach(d => batch.delete(d.ref));
     await batch.commit();
-    // continue until none left
   }
 }
 
-/* ======= Settings modal behavior ======= */
-settingsBtn.addEventListener('click', ()=> showModal(settingsModal));
-closeSettings.addEventListener('click', ()=> hideModal(settingsModal));
-closeSettingsBtn.addEventListener('click', ()=> hideModal(settingsModal));
+/* ===== Subscribe to Global on load (visible to all) ===== */
+(async function subscribeGlobal(){
+  roomsMap['Global'] = { label: '🌍 Global', members: [] };
+  renderRooms();
+  // subscribe to global messages
+  const globalCol = collection(db,'rooms','Global','messages');
+  const q = query(globalCol, orderBy('clientTime','asc'));
+  onSnapshot(q, snap => {
+    // if user currently in Global, update; otherwise keep snapshot to ensure messagesMap updated when switching
+    if(currentRoom === 'Global'){
+      if(messagesList.length === 0){
+        contentEl.innerHTML = '';
+        const docs = snap.docs.slice().sort((a,b)=>{
+          const A = a.data().clientTime || 0;
+          const B = b.data().clientTime || 0;
+          return A - B;
+        });
+        docs.forEach(d => insertMessageOrdered(d.id, d.data()));
+        scrollToBottom();
+      } else {
+        snap.docChanges().forEach(ch => {
+          if(ch.type === 'added' && !messagesMap[ch.doc.id]) insertMessageOrdered(ch.doc.id, ch.doc.data());
+          if(ch.type === 'removed') removeMessage(ch.doc.id);
+        });
+        scrollToBottom();
+      }
+    } else {
+      // still keep global in roomsMap; don't render into content
+    }
+  });
+})();
+
+/* ===== Settings modal ===== */
+settingsBtn.addEventListener('click', ()=> show(settingsModal));
+closeSettings.addEventListener('click', ()=> hide(settingsModal));
+closeSettingsBtn.addEventListener('click', ()=> hide(settingsModal));
 themeSelect.addEventListener('change', ()=>{
   const v = themeSelect.value;
   document.body.setAttribute('data-theme', v);
   localStorage.setItem('theme', v);
 });
-(function initTheme(){
-  const saved = localStorage.getItem('theme') || 'light';
-  document.body.setAttribute('data-theme', saved);
-  themeSelect.value = saved;
-})();
 
-/* ======= Load Global immediately (for all users) ======= */
-(async function subscribeGlobal(){
-  // show Global as default
-  roomsMap['Global'] = { label: '🌍 Global' };
-  renderRooms();
-  // subscribe to Global messages (visible to all)
-  const globalCol = collection(db,'rooms','Global','messages');
-  const q = query(globalCol, orderBy('clientTime','asc'));
-  onSnapshot(q, snap => {
-    // if currently in Global, render; otherwise don't force
-    if(currentRoom !== 'Global') return;
-    // clear and render current snapshot (initial + later updates)
-    if(messageIds.size === 0){
-      contentEl.innerHTML = '';
-      snap.forEach(d => renderMessage(d.id, d.data()));
-      contentEl.scrollTop = contentEl.scrollHeight;
-    } else {
-      snap.docChanges().forEach(change => {
-        if(change.type === 'added'){
-          if(!messageIds.has(change.doc.id)) renderMessage(change.doc.id, change.doc.data());
-        } else if(change.type === 'removed'){
-          removeMessage(change.doc.id);
-        }
-      });
-    }
-  });
-})();
+/* ===== Utility: initial theme from localStorage ===== */
+(function initTheme(){ const saved = localStorage.getItem('theme') || 'light'; document.body.setAttribute('data-theme', saved); themeSelect.value = saved; })();
 
-/* ======= Utility: load roomsMeta if switching to a room that's not in roomsMap ======= */
-async function ensureRoomMeta(roomId){
-  if(roomsMap[roomId]) return roomsMap[roomId];
-  try {
-    const r = await getDoc(doc(db,'roomsMeta', roomId));
-    if(r.exists()){
-      const data = r.data();
-      roomsMap[roomId] = { label: data.label || roomId, members: data.members || [] };
-      renderRooms();
-      return roomsMap[roomId];
-    } else {
-      // unknown room, create temp meta
-      roomsMap[roomId] = { label: roomId, members: [] };
-      renderRooms();
-      return roomsMap[roomId];
-    }
-  } catch(e){
-    console.error('ensureRoomMeta failed', e);
-    roomsMap[roomId] = { label: roomId, members: [] };
-    renderRooms();
-    return roomsMap[roomId];
-  }
-}
+/* ===== If page opened with ?room=roomId then open it after load ===== */
+(function openRoomFromQuery(){ const r = new URLSearchParams(location.search).get('room'); if(r) { // ensure room meta and switch
+  (async ()=>{ try{ const m = await getDoc(doc(db,'roomsMeta',r)); if(m.exists()) roomsMap[r] = m.data(); else roomsMap[r] = { label:r, members: [] }; renderRooms(); switchRoom(r); } catch(e){ console.error(e); } })();
+} })();
 
-/* ======= If user visits a private roomId via URL param ?room=..., open it (optional) ======= */
-(function openRoomFromQuery(){
-  const urlp = new URLSearchParams(location.search);
-  const r = urlp.get('room');
-  if(r){
-    // decode room id if needed
-    (async ()=>{ await ensureRoomMeta(r); switchRoom(r); })();
-  }
-})();
-
-/* ======= Initial UI state: disable controls until auth known (onAuthStateChanged handles enabling) ======= */
-sendBtn.disabled = true;
-msgInput.disabled = true;
-newChatBtn.disabled = true;
-
-/* ======= Make sure when you first open chat.html it doesn't redirect (we do nothing here) ======= */
 </script>
 </body>
 </html>
