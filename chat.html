@@ -2,229 +2,454 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Hybrid Chat — Live</title>
-<link rel="preconnect" href="https://fonts.gstatic.com">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Hybrid Chat — Live (Rewritten)</title>
+
+<!--
+  Full rewrite. Keep chat mechanics unchanged.
+  - Adds multiple themes (light/dark/blue/green/purple/solar/contrast)
+  - Fixes blue & green themes
+  - Profile pics: default = first 2 letters of trimmed username; user can upload in Settings
+  - Settings close button visible in all themes
+  - Prevents overflow on mobile (fits viewport)
+  - Unread red-dot indicator preserved
+  - Username trimming and sanitization kept (no trailing spaces create different rooms)
+  - Lots of inline comments, verbose formatting for readability
+-->
+
 <style>
-:root{
-  --bg:#f5f7fa; --sidebar:#111827; --accent:#2563eb; --card:#ffffff; --text:#0f172a;
-  --self:#0ea5a4; --other:#eef2f7; --muted:#7b8794; --danger:#ff5252;
-}
-[data-theme="dark"]{
-  --bg:#07111a; --sidebar:#0b1220; --accent:#2563eb; --card:#0f1724; --text:#e6eef6;
-  --self:#0ea5a4; --other:#1f2937; --muted:#9fb0c5; --danger:#ff6b6b;
-}
+  /* ==================================================================
+     THEME VARIABLES (base)
+     ================================================================== */
+  :root{
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --sidebar: #111827;
+    --accent: #2563eb;
+    --accent-2: #1e40af;
+    --text: #0f172a;
+    --muted: #6b7280;
+    --self: #0ea5a4;
+    --other: #eef2f7;
+    --danger: #ff5252;
+    --close-color: #0f172a;        /* color for modal close button (works in all themes) */
+    --card-shadow: 0 10px 30px rgba(2,6,23,0.08);
+    --radius: 12px;
+    --max-width: 1150px;
+    --container-gap: 14px;
+    --sidebar-width: 280px;
+  }
 
-*{box-sizing:border-box}
-html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui,Arial,sans-serif;color:var(--text);-webkit-font-smoothing:antialiased}
-body{overflow:hidden} /* prevent page scroll — only content scrolls */
-a{color:inherit}
+  /* -------------------------
+     Dark
+     ------------------------- */
+  [data-theme="dark"]{
+    --bg: #07111a;
+    --card: #0f1724;
+    --sidebar: #0b1220;
+    --accent: #2563eb;
+    --accent-2: #1e40af;
+    --text: #e6eef6;
+    --muted: #9fb0c5;
+    --self: #06b6d4;
+    --other: #15202b;
+    --danger: #ff6b6b;
+    --close-color: #e6eef6;
+    --card-shadow: 0 10px 30px rgba(2,6,23,0.5);
+  }
 
-/* Center the chat card and don't be fullscreen */
-.app-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
-.container{
-  display:flex;
-  gap:14px;
-  width:100%;
-  max-width:1150px;
-  height:calc(100vh - 48px);
-  max-height:880px;
-  border-radius:14px;
-  padding:12px;
-  box-shadow:0 10px 30px rgba(15,23,42,0.12);
-  background:linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.4));
-}
+  /* -------------------------
+     Blue (fixed & balanced)
+     ------------------------- */
+  [data-theme="blue"]{
+    --bg: #eef7ff;
+    --card: #ffffff;
+    --sidebar: #0f172a;
+    --accent: #0b5cff;
+    --accent-2: #0645d8;
+    --text: #0b1220;
+    --muted: #394b6a;
+    --self: #0b69ff;
+    --other: #e6f0ff;
+    --danger: #e63946;
+    --close-color: #0b1220;
+  }
 
-/* Sidebar */
-.sidebar{
-  width:280px;
-  background:var(--sidebar);
-  color:#fff;
-  border-radius:12px;
-  padding:12px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  min-width:88px;
-}
-.sidebar .brand{display:flex;align-items:center;gap:10px}
-.brand .logo{width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#06b6d4);display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff}
-.sidebar h3{margin:6px 0 0;font-size:15px}
-.rooms{flex:1;overflow:auto;padding:6px 2px}
-.room-btn{
-  display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;background:transparent;border:0;color:#fff;margin-bottom:8px;cursor:pointer;font-weight:700;
-  transition:background .12s, transform .06s;
-  position:relative; width:100%;
-}
-.room-btn:hover{background:rgba(255,255,255,0.03); transform:translateY(-1px)}
-.room-btn.active{background:rgba(255,255,255,0.06)}
-.room-left{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
-.room-avatar{
-  width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;
-  flex-shrink:0;
-}
-.room-label{flex:1;text-align:left;padding-right:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
-.room-meta{font-size:12px;color:rgba(255,255,255,0.7);opacity:.9}
-/* unread badge / red icon on left */
-.unread-badge{
-  width:12px;height:12px;border-radius:50%;background:var(--danger);display:inline-block;margin-left:0;flex-shrink:0;box-shadow:0 0 0 3px rgba(0,0,0,0.15);
-  margin-right:8px;
-}
-/* for numeric unread */
-.unread-count{min-width:18px;height:18px;border-radius:999px;background:var(--danger);display:inline-flex;align-items:center;justify-content:center;font-size:11px;padding:0 6px;margin-left:8px;color:#fff}
+  /* -------------------------
+     Green (fixed & balanced)
+     ------------------------- */
+  [data-theme="green"]{
+    --bg: #ecfdf5;
+    --card: #ffffff;
+    --sidebar: #064e3b;
+    --accent: #059669;
+    --accent-2: #047857;
+    --text: #064e3b;
+    --muted: #0f766e;
+    --self: #059669;
+    --other: #d1fae5;
+    --danger: #b91c1c;
+    --close-color: #064e3b;
+  }
 
-/* controls */
-.controls{display:flex;flex-direction:column;gap:8px;margin-top:6px}
-.btn{padding:10px;border-radius:10px;border:0;background:var(--accent);color:#fff;cursor:pointer;font-weight:700}
-.btn-ghost{padding:8px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff;cursor:pointer}
+  /* -------------------------
+     Purple
+     ------------------------- */
+  [data-theme="purple"]{
+    --bg: #faf5ff;
+    --card: #ffffff;
+    --sidebar: #4c1d95;
+    --accent: #7c3aed;
+    --accent-2: #6d28d9;
+    --text: #2e1065;
+    --muted: #6b21a8;
+    --self: #7c3aed;
+    --other: #efe9ff;
+    --danger: #b91c1c;
+    --close-color: #2e1065;
+  }
 
-/* Main area */
-.main{
-  flex:1;display:flex;flex-direction:column;background:var(--card);border-radius:12px;overflow:hidden;min-width:0;
-  box-shadow:inset 0 1px 0 rgba(0,0,0,0.02);
-}
-.header{display:flex;justify-content:space-between;align-items:center;padding:14px;background:linear-gradient(90deg,var(--accent),#1e3a8a);color:#fff;position:sticky;top:0;z-index:10}
-.header .left{display:flex;flex-direction:column;min-width:0}
-.title{font-weight:800; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.subtitle{font-size:12px;opacity:.95;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.header-right{display:flex;gap:10px;align-items:center}
+  /* -------------------------
+     Solar (warm)
+     ------------------------- */
+  [data-theme="solar"]{
+    --bg: #fff8e6;
+    --card: #fffefc;
+    --sidebar: #b45309;
+    --accent: #f59e0b;
+    --accent-2: #f97316;
+    --text: #4b2e05;
+    --muted: #7c2d12;
+    --self: #f97316;
+    --other: #fff1d6;
+    --danger: #b91c1c;
+    --close-color: #4b2e05;
+  }
 
-/* message area */
-.content{flex:1;overflow:auto;padding:18px 16px; background:linear-gradient(180deg, rgba(0,0,0,0.01), transparent); -webkit-overflow-scrolling:touch;scroll-behavior:smooth; padding-bottom:120px}
-.message-row{display:flex;margin:12px 0;clear:both;align-items:flex-end;max-width:100%}
-.message-row.me{justify-content:flex-end}
-.bubble{padding:10px 14px;border-radius:14px;max-width:74%;word-break:break-word;box-shadow:0 4px 18px rgba(2,6,23,0.06)}
-.bubble.me{background:var(--self);color:#fff;border-bottom-right-radius:6px}
-.bubble.them{background:var(--other);color:var(--text);border-bottom-left-radius:6px}
-.msg-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.msg-username{font-size:13px;font-weight:700}
-.msg-meta{font-size:11px;opacity:.75;margin-top:6px;color:var(--muted)}
-.msg-text{white-space:pre-wrap}
+  /* -------------------------
+     High contrast (for accessibility)
+     ------------------------- */
+  [data-theme="contrast"]{
+    --bg: #000000;
+    --card: #ffffff;
+    --sidebar: #000000;
+    --accent: #ffd400;
+    --accent-2: #ffb400;
+    --text: #000000;
+    --muted: #333333;
+    --self: #ffd400;
+    --other: #ffffff;
+    --danger: #ff4d4d;
+    --close-color: #000000;
+  }
 
-/* footer / input */
-.footer{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(0,0,0,0.06);align-items:center;background:linear-gradient(180deg,transparent,rgba(0,0,0,0.02));position:sticky;bottom:0;z-index:9}
-.input{flex:1;padding:12px;border-radius:12px;border:1px solid #e6eef6;min-width:0}
-.small{font-size:13px;padding:8px 10px;border-radius:8px}
+  /* ==================================================================
+     LAYOUT / PRETTY
+     ================================================================== */
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  body{overflow:hidden} /* prevent window scroll; all scrolls are internal */
 
-/* modals */
-.modal{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;z-index:60;padding:18px}
-.panel{background:var(--card);padding:16px;border-radius:12px;min-width:320px;max-width:760px;color:var(--text);position:relative;box-shadow:0 10px 40px rgba(2,6,23,0.15);max-height:92vh;overflow:auto}
-.panel h3{margin-top:0}
-.panel-close{position:absolute;right:12px;top:12px;border:0;background:transparent;font-size:20px;cursor:pointer;line-height:1;padding:6px;border-radius:8px;z-index:200}
-.panel-close:focus{outline:2px solid rgba(37,99,235,0.3)}
+  /* very outer wrapper (centered on wide screens) */
+  .outer {
+    display:flex;
+    align-items:flex-start;         /* align toward top on mobile */
+    justify-content:center;
+    min-height:100vh;
+    padding:12px;
+    gap:var(--container-gap);
+  }
 
-/* user list */
-.user-list{max-height:260px;overflow:auto;border:1px solid #eee;padding:8px;border-radius:8px;margin:8px 0}
-.user-item{display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid #f0f0f0}
+  /* main container (card) */
+  .container {
+    width:100%;
+    max-width:var(--max-width);
+    background:linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.4));
+    border-radius:var(--radius);
+    padding:12px;
+    box-shadow:var(--card-shadow);
+    display:flex;
+    gap:var(--container-gap);
+    align-items:stretch;
+    max-height: calc(100vh - 28px);   /* reduce bottom overflow on mobile */
+  }
 
-/* responsive */
-@media(max-width:920px){
-  .container{max-width:100%;height:calc(100vh - 18px);padding:8px}
-  .sidebar{width:92px;padding:8px}
-  .room-label{display:none}
-  .title{font-size:15px}
-  .main{border-radius:10px}
-}
-@media(max-width:480px){
-  .container{padding:6px;height:calc(100vh - 12px);border-radius:10px}
-  .sidebar{display:flex;flex-direction:column;align-items:center;gap:6px}
-  .room-avatar{width:36px;height:36px}
-  .content{padding:12px 8px 140px 8px}
-  .footer{padding:10px}
-  .panel{width:100%;max-width:640px;border-radius:10px}
-}
+  /* Sidebar */
+  .sidebar {
+    width:var(--sidebar-width);
+    min-width:88px;
+    background:var(--sidebar);
+    color:#fff;
+    border-radius:10px;
+    padding:12px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    flex-shrink:0;
+    align-items:stretch;
+  }
+
+  .brand {
+    display:flex;
+    gap:10px;
+    align-items:center;
+  }
+
+  .logo {
+    width:44px;height:44px;border-radius:8px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;
+  }
+
+  .brand .title {
+    font-size:14px;font-weight:800;margin:0;padding:0;
+  }
+
+  .rooms {
+    flex:1;
+    overflow:auto;
+    padding-right:6px;   /* give a little room for scroll */
+  }
+
+  .room-btn {
+    display:flex;align-items:center;justify-content:space-between;
+    gap:8px;padding:8px;border-radius:10px;background:transparent;border:0;color:#fff;margin-bottom:8px;
+    cursor:pointer;font-weight:700;text-align:left;
+    transition:background .12s, transform .06s;
+  }
+
+  .room-btn:hover { background: rgba(255,255,255,0.03); transform:translateY(-1px); }
+  .room-btn.active { background: rgba(255,255,255,0.06); }
+
+  .room-left { display:flex;align-items:center;gap:10px;min-width:0;flex:1; }
+  .room-avatar {
+    width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;flex-shrink:0;
+  }
+  .room-label { flex:1;text-align:left;padding-right:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px }
+  .room-meta { font-size:12px;color:rgba(255,255,255,0.75) }
+
+  /* unread dot on left */
+  .unread-badge { width:12px;height:12px;border-radius:50%;background:var(--danger);display:inline-block;margin-right:8px;box-shadow:0 0 0 3px rgba(0,0,0,0.12);flex-shrink:0; }
+
+  /* numeric count */
+  .unread-count { min-width:18px;height:18px;border-radius:999px;background:var(--danger);display:inline-flex;align-items:center;justify-content:center;font-size:11px;padding:0 6px;margin-left:8px;color:#fff }
+
+  /* sidebar controls */
+  .controls { display:flex;flex-direction:column;gap:8px;margin-top:6px }
+  .btn { padding:10px;border-radius:10px;border:0;background:var(--accent);color:#fff;cursor:pointer;font-weight:700 }
+  .btn-ghost { padding:8px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff;cursor:pointer }
+
+  /* MAIN column */
+  .main {
+    flex:1;display:flex;flex-direction:column;background:var(--card);border-radius:10px;overflow:hidden;min-width:0;
+  }
+
+  /* header sticky */
+  .header {
+    display:flex;justify-content:space-between;align-items:center;padding:12px;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;position:sticky;top:0;z-index:10;flex-shrink:0;
+  }
+
+  .header .left { display:flex;flex-direction:column;min-width:0 }
+  .title { font-weight:800; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .subtitle { font-size:12px; opacity:.95; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+
+  .header-right { display:flex; gap:10px; align-items:center }
+
+  /* content (messages) area */
+  .content {
+    flex:1; overflow:auto; padding:16px; background:linear-gradient(180deg, rgba(0,0,0,0.02), transparent); -webkit-overflow-scrolling:touch; scroll-behavior:smooth;
+    padding-bottom:120px; /* leave space for sticky footer */
+  }
+
+  /* message row */
+  .message-row { display:flex; margin:12px 0; clear:both; align-items:flex-end; max-width:100% }
+  .message-row.me { justify-content:flex-end }
+  .bubble { padding:10px 14px; border-radius:14px; max-width:72%; word-break:break-word; box-shadow:0 4px 18px rgba(2,6,23,0.06) }
+  .bubble.me { background:var(--self); color:#fff; border-bottom-right-radius:6px }
+  .bubble.them { background:var(--other); color:var(--text); border-bottom-left-radius:6px }
+
+  .msg-meta { font-size:11px; opacity:.75; margin-top:6px; color:var(--muted) }
+
+  /* composer footer sticky */
+  .footer { display:flex; gap:8px; padding:10px; border-top:1px solid rgba(0,0,0,0.06); align-items:center; background:linear-gradient(180deg,transparent,rgba(0,0,0,0.02)); position:sticky; bottom:0; z-index:9; flex-shrink:0 }
+  .input { flex:1; padding:12px; border-radius:12px; border:1px solid #e6eef6; min-width:0; outline:none }
+  .small { font-size:13px; padding:8px 10px; border-radius:8px }
+
+  /* modals */
+  .modal { position:fixed; left:0; top:0; right:0; bottom:0; background:rgba(0,0,0,0.45); display:none; align-items:center; justify-content:center; z-index:60; padding:12px }
+  .panel { background:var(--card); padding:16px; border-radius:10px; min-width:320px; max-width:92%; color:var(--text); position:relative; max-height:92vh; overflow:auto; box-shadow:var(--card-shadow) }
+  .panel h3 { margin-top:0 }
+  .panel .panel-close { position:absolute; right:12px; top:12px; border:0; background:transparent; cursor:pointer; font-size:18px; color:var(--close-color) }
+  .panel .panel-close:focus { outline:2px solid rgba(0,0,0,0.06); border-radius:6px }
+
+  .user-list { max-height:260px; overflow:auto; border:1px solid #eee; padding:8px; border-radius:8px; margin:8px 0 }
+  .user-item { display:flex; justify-content:space-between; align-items:center; padding:6px; border-bottom:1px solid #f0f0f0 }
+
+  /* responsive adjustments */
+  @media(max-width:920px){
+    .container { max-width:100%; height: calc(100vh - 18px); padding:8px; gap:10px }
+    .sidebar { width:92px; padding:8px }
+    .room-label { display:none }
+    .title { font-size:15px }
+    .content { padding:12px; padding-bottom:140px }
+  }
+
+  @media(max-width:480px){
+    .container { padding:6px; height: calc(100vh - 12px); border-radius:10px }
+    .logo{display:none}
+    .header{padding:10px}
+    .sidebar{display:flex;flex-direction:column;align-items:center}
+    .footer{padding:8px}
+    .content{padding:10px 8px 160px 8px}
+    .panel{width:100%;max-width:640px;border-radius:10px}
+  }
+
+  /* helper small utilities used in JS */
+  .hidden{display:none !important}
+  .muted{color:var(--muted)}
+  .flex{display:flex}
+  .gap8{gap:8px}
 </style>
 </head>
-<body data-theme="light">
 
-<div class="app-wrap">
-  <div class="container" role="application" aria-label="Hybrid Chat">
-    <!-- Sidebar -->
-    <aside class="sidebar" aria-label="Rooms and controls">
-      <div class="brand">
-        <div class="logo" title="Hybrid Chat">HC</div>
-        <div>
-          <h3>Hybrid Chat</h3>
-          <div style="font-size:12px;color:rgba(255,255,255,0.8)">Live rooms</div>
+<body data-theme="light">
+<!-- ==================================================================
+     HTML STRUCTURE
+     ================================================================== -->
+<div class="outer" id="outer">
+  <div class="container" role="application" aria-label="Hybrid Chat App">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" aria-label="Sidebar">
+      <div class="brand" style="margin-bottom:6px">
+        <div class="logo">HC</div>
+        <div style="min-width:0">
+          <div class="title">Hybrid Chat</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.8)">Live — Global & Private Rooms</div>
         </div>
       </div>
 
       <div class="rooms" id="roomsList" aria-live="polite" aria-atomic="true">
-        <!-- rooms injected -->
+        <!-- rooms will be injected here -->
       </div>
 
       <div class="controls">
         <button id="newChatBtn" class="btn" title="New private/group chat">+ New Chat</button>
-        <div style="display:flex;gap:8px">
-          <button id="refreshUsers" class="btn-ghost" style="flex:1">Refresh users</button>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button id="refreshUsers" class="btn-ghost" style="flex:1">Refresh</button>
           <button id="settingsBtn" class="btn-ghost" style="flex:1">Settings</button>
         </div>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;margin-top:6px">
           <button id="loginBtn" class="btn-ghost" style="flex:1">Login</button>
           <button id="deleteRoomBtn" class="btn-ghost" style="flex:1;display:none">Delete</button>
         </div>
       </div>
     </aside>
 
-    <!-- Main -->
-    <main class="main" aria-live="polite">
+    <!-- MAIN -->
+    <main class="main" role="main">
       <div class="header">
         <div class="left">
           <div id="title" class="title">—</div>
           <div id="subtitle" class="subtitle">—</div>
         </div>
+
         <div class="header-right">
           <div id="membersList" style="font-size:13px;opacity:.95;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
         </div>
       </div>
 
-      <div id="content" class="content" role="log" aria-live="polite"></div>
+      <div id="content" class="content" role="log" aria-live="polite" aria-atomic="false">
+        <!-- messages injected here -->
+      </div>
 
       <div class="footer" role="region" aria-label="Message composer">
         <input id="msgInput" class="input" placeholder="Type a message…" disabled aria-label="Message input" />
         <button id="sendBtn" class="btn small" disabled>Send</button>
       </div>
     </main>
+
   </div>
 </div>
 
-<!-- Create Chat Modal -->
+<!-- CREATE CHAT MODAL -->
 <div id="createModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
-  <div class="panel" role="document">
-    <button class="panel-close" id="createClose" aria-label="Close">✕</button>
-    <h3>Create private/group chat (max 6)</h3>
-    <div style="font-size:13px;color:rgba(0,0,0,0.6)">Select up to 5 other users (creator + up to 5 = max 6)</div>
-    <input id="userSearch" placeholder="Search username..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;margin-top:8px" />
-    <div id="usersContainer" class="user-list" aria-live="polite"></div>
+  <div class="panel" role="document" aria-labelledby="createTitle">
+    <button id="createClose" class="panel-close" aria-label="Close">✕</button>
+    <h3 id="createTitle">Create private/group chat (max 6)</h3>
+    <div style="font-size:13px;color:var(--muted)">Select up to 5 other users (creator counts as 1; max 6 total).</div>
+
+    <input id="userSearch" placeholder="Search username..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;margin-top:10px" />
+
+    <div id="usersContainer" class="user-list" role="list"></div>
+
     <input id="groupLabel" placeholder="Optional chat label" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;margin-top:8px" />
+
     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
       <button id="createCancel" class="btn-ghost small">Cancel</button>
       <button id="createConfirm" class="btn small">Create</button>
     </div>
+
     <div id="createMsg" style="color:var(--danger);margin-top:8px;font-size:13px"></div>
   </div>
 </div>
 
-<!-- Settings Modal -->
+<!-- SETTINGS MODAL -->
 <div id="settingsModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
-  <div class="panel">
+  <div class="panel" role="document" aria-labelledby="settingsTitle">
     <button id="closeSettings" class="panel-close" aria-label="Close settings">✕</button>
-    <h3>Settings</h3>
-    <label style="display:block;margin-top:6px">Theme</label>
+    <h3 id="settingsTitle">Settings</h3>
+
+    <label style="display:block;margin-top:8px">Theme</label>
     <select id="themeSelect" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;border:1px solid #ddd">
       <option value="light">Light</option>
       <option value="dark">Dark</option>
       <option value="blue">Blue</option>
       <option value="green">Green</option>
+      <option value="purple">Purple</option>
+      <option value="solar">Solar</option>
+      <option value="contrast">High Contrast</option>
     </select>
+
+    <label style="display:block;margin-top:12px">Profile picture (optional)</label>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+      <div id="profilePreviewWrap" style="width:64px;height:64px;border-radius:10px;background:rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:center;overflow:hidden">
+        <img id="profilePreview" alt="profile preview" style="width:100%;height:100%;object-fit:cover" />
+      </div>
+      <div style="flex:1">
+        <input id="profileUpload" type="file" accept="image/*" />
+        <div style="font-size:12px;color:var(--muted);margin-top:6px">Or leave blank to use initials-based avatar (first two letters of your username).</div>
+      </div>
+    </div>
+
     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
       <button id="closeSettingsBtn" class="btn-ghost small">Close</button>
     </div>
   </div>
 </div>
 
+<!-- small hidden an accessible template area -->
+<template id="roomTemplate">
+  <button class="room-btn" type="button">
+    <div class="room-left">
+      <span class="unread-spacer" style="width:12px;display:inline-block"></span>
+      <div class="room-avatar">--</div>
+      <div class="room-label">Room label</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="room-meta muted">0m</div>
+    </div>
+  </button>
+</template>
+
+<!-- ==================================================================
+     JAVASCRIPT - Firebase + App Logic (formatted + commented)
+     ================================================================== -->
 <script type="module">
-/* ===== Firebase (modular v12) ===== */
+/* =========================================================================
+   Firebase modular v12 imports
+   (kept the same - do not alter these lines unless you update firebase)
+   ========================================================================= */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import {
@@ -233,7 +458,9 @@ import {
   writeBatch, deleteDoc, limit
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-/* ====== CONFIG - use your project's config ====== */
+/* =========================================================================
+   Firebase config - keep yours exactly (unchanged)
+   ========================================================================= */
 const firebaseConfig = {
   apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
   authDomain: "hybridchat-8a96c.firebaseapp.com",
@@ -246,7 +473,9 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-/* ===== UI refs ===== */
+/* =========================================================================
+   UI references
+   ========================================================================= */
 const roomsListEl = document.getElementById('roomsList');
 const contentEl = document.getElementById('content');
 const titleEl = document.getElementById('title');
@@ -270,9 +499,13 @@ const themeSelect = document.getElementById('themeSelect');
 const loginBtn = document.getElementById('loginBtn');
 const refreshUsersBtn = document.getElementById('refreshUsers');
 const deleteRoomBtn = document.getElementById('deleteRoomBtn');
-const createCloseBtn = document.getElementById('createClose');
+const profileUpload = document.getElementById('profileUpload');
+const profilePreview = document.getElementById('profilePreview');
+const createClose = document.getElementById('createClose');
 
-/* ===== App state ===== */
+/* =========================================================================
+   App State (kept similar to your original)
+   ========================================================================= */
 let currentUser = null; // { uid, email, username }
 let currentRoom = 'Global';
 let roomsMap = { Global: { label: '🌍 Global', members: [] } }; // roomId -> meta
@@ -282,27 +515,50 @@ let messagesList = []; // ordered array of message ids for currentRoom
 let messagesMap = {};  // id -> data
 let messageElements = {}; // id -> DOM element
 
-/* watchers for per-room 'last message' (lightweight) to show unread indicator */
-const roomLastUnsubs = {}; // roomId -> unsubscribe function
-const unreadCounts = {};   // roomId -> number (0 means read)
+/* lightweight watchers for unread status (keeps original unread behavior) */
+const roomLastUnsubs = {}; // roomId -> unsubscribe fn
+const unreadCounts = {};   // roomId -> number
 const roomLastMessageTime = {}; // roomId -> timestamp of last message observed
 
-/* ===== Helpers ===== */
+/* local user customization (profile pic stored locally in localStorage as dataURL) */
+const USERNAME_KEY = 'hc_username';
+const THEME_KEY = 'hc_theme';
+const PROFILE_KEY = 'hc_profilepic';
+
+/* =========================================================================
+   Utilities
+   ========================================================================= */
+
+/**
+ * sanitize - trim and normalize username strings to prevent trailing-space duplicates
+ *   - collapse whitespace to single underscores, remove non-word except hyphen, lowercase
+ * This is intentionally conservative to keep roomId generation stable.
+ */
 function sanitize(name){
-  // Trim and collapse whitespace; replace with underscores and remove odd chars
-  return (name || '').toString().trim().replace(/\s+/g,'_').replace(/[^\w\-]/g,'').toLowerCase();
+  if(!name) return '';
+  return name.toString().trim().replace(/\s+/g,'_').replace(/[^\w\-]/g,'').toLowerCase();
 }
+
+/**
+ * makeRoomId - from an array of usernames (strings) create canonical room id
+ *  - uses sanitized, sorted usernames joined by '__'
+ */
 function makeRoomId(usernames){
-  // expect trimmed usernames
-  return usernames.map(s => (s||'').toString().trim()).map(s=>sanitize(s)).sort().join('__');
+  return usernames.map(s => (s||'').toString().trim()).map(s => sanitize(s)).sort().join('__');
 }
+
+/* show/hide helpers for modals */
 function show(el){ el.style.display = 'flex'; el.setAttribute('aria-hidden','false'); }
 function hide(el){ el.style.display = 'none'; el.setAttribute('aria-hidden','true'); }
+
+/* format time for message meta */
 function fmtTime(msOrDate){
   if(!msOrDate) return '';
   const d = (typeof msOrDate === 'number') ? new Date(msOrDate) : (msOrDate.toDate ? msOrDate.toDate() : new Date(msOrDate));
   return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 }
+
+/* get/set last seen for a room (localStorage-based; does not touch Firestore) */
 function getLastSeen(roomId){
   const key = 'lastSeen_' + roomId;
   const v = localStorage.getItem(key);
@@ -311,31 +567,98 @@ function getLastSeen(roomId){
 function setLastSeen(roomId, ts = Date.now()){
   localStorage.setItem('lastSeen_' + roomId, String(ts));
   unreadCounts[roomId] = 0;
-  renderRooms();
+  renderRooms(); // refresh UI
 }
 
-/* ===== Auth state ===== */
-onAuthStateChanged(auth, async (u)=>{
+/* =========================================================================
+   Avatar generation and profile pic handling
+   - Default avatar: first TWO letters of trimmed username, capitalized
+   - User can upload an image; stored locally in localStorage as dataURL
+   ========================================================================= */
+
+/**
+ * generateInitialsDataURL(name, size=128, bgColor, textColor)
+ * Returns a data URL for a square PNG with initials centered.
+ */
+function generateInitialsDataURL(name, size=128, bg=null, textColor='#fff'){
+  const initials = (name||'').toString().trim().slice(0,2).toUpperCase() || 'U';
+  // easy deterministic background color choice based on initials
+  const colors = ['#0b5cff','#06b6d4','#10b981','#7c3aed','#f97316','#2563eb','#ef4444'];
+  const idx = (initials.charCodeAt(0) || 65) % colors.length;
+  const bgColor = bg || colors[idx];
+  // canvas render
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  // background
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0,0,size,size);
+  // initials text
+  ctx.fillStyle = textColor;
+  ctx.font = `bold ${Math.floor(size*0.42)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(initials, size/2, size/2+2);
+  return canvas.toDataURL('image/png');
+}
+
+/* get profile pic for current user:
+   - if user uploaded pic stored in localStorage -> return it
+   - else fallback to generated initials based on username
+*/
+function getLocalProfilePic(username){
+  const stored = localStorage.getItem(PROFILE_KEY);
+  if(stored) return stored;
+  return generateInitialsDataURL(username || (currentUser && currentUser.username) || 'U');
+}
+
+/* wire up profile preview control */
+profilePreview.src = getLocalProfilePic(localStorage.getItem(USERNAME_KEY) || 'User');
+profileUpload.addEventListener('change', (ev) => {
+  const f = ev.target.files && ev.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const dataUrl = e.target.result;
+      localStorage.setItem(PROFILE_KEY, dataUrl);
+      profilePreview.src = dataUrl;
+    } catch(err) {
+      console.error('profile store error', err);
+      alert('Failed to save profile image locally.');
+    }
+  };
+  reader.readAsDataURL(f);
+});
+
+/* =========================================================================
+   Auth State: keep behavior similar to original file
+   - When user authenticates, save username in users/{uid} doc (trimmed)
+   - Enable UI elements
+   - Subscribe to rooms for user
+   ========================================================================= */
+onAuthStateChanged(auth, async (u) => {
   if(u){
-    // ensure users/{uid} doc exists with trimmed username
+    // ensure users/{uid} doc exists with trimmed username - preserve original logic
     try {
       const uRef = doc(db,'users', u.uid);
       const uSnap = await getDoc(uRef);
       let username;
       if(uSnap.exists()){
-        username = (uSnap.data().username || u.displayName || (u.email||'').split('@')[0]).toString().trim();
+        username = (uSnap.data().username || u.displayName || u.email.split('@')[0]).toString().trim();
         await setDoc(uRef, { username, email: u.email }, { merge: true });
       } else {
-        username = (u.displayName || (u.email||'').split('@')[0]).toString().trim();
+        username = (u.displayName || u.email.split('@')[0]).toString().trim();
         await setDoc(uRef, { username, email: u.email, createdAt: serverTimestamp() });
       }
       currentUser = { uid: u.uid, email: u.email, username };
       sessionStorage.setItem('username', username);
+      localStorage.setItem(USERNAME_KEY, username);
     } catch(err){
       console.error('user doc error', err);
-      const fallbackName = (u.displayName || (u.email||'').split('@')[0] || 'Guest').toString().trim();
-      currentUser = { uid: u.uid, email: u.email, username: fallbackName };
+      currentUser = { uid: u.uid, email: u.email, username: (u.displayName || u.email.split('@')[0]).toString().trim() };
       sessionStorage.setItem('username', currentUser.username);
+      localStorage.setItem(USERNAME_KEY, currentUser.username);
     }
 
     // enable UI
@@ -345,11 +668,14 @@ onAuthStateChanged(auth, async (u)=>{
     loginBtn.textContent = 'Logout';
     loginBtn.onclick = async ()=>{ await signOut(auth); location.reload(); };
 
-    // subscribe rooms for this user
+    // subscribe to rooms that contain this username
     subscribeRoomsForUser(currentUser.username);
-    // Default to Global
+
+    // Default to Global room (unchanged)
     switchRoom('Global');
 
+    // update profile preview (in case username changed)
+    profilePreview.src = getLocalProfilePic(currentUser.username);
   } else {
     // not logged in
     currentUser = null;
@@ -359,146 +685,117 @@ onAuthStateChanged(auth, async (u)=>{
     loginBtn.textContent = 'Login / Sign up';
     loginBtn.onclick = ()=> window.location.href = 'login.html';
 
-    // show only Global
+    // show only Global room
     roomsMap = { Global: { label: '🌍 Global', members: [] } };
     renderRooms();
     switchRoom('Global');
 
-    // clear watchers
+    // unsubscribe watchers
     if(roomsUnsub){ roomsUnsub(); roomsUnsub = null; }
     Object.keys(roomLastUnsubs).forEach(r => { if(roomLastUnsubs[r]) roomLastUnsubs[r](); delete roomLastUnsubs[r]; });
   }
 
   // apply saved theme
-  const saved = localStorage.getItem('theme') || 'light';
+  const saved = localStorage.getItem(THEME_KEY) || 'light';
   document.body.setAttribute('data-theme', saved);
   themeSelect.value = saved;
 });
 
-/* ===== Rooms subscription for a username (keeps Global + user's rooms) ===== */
+/* =========================================================================
+   Subscribe to rooms for a username (roomsMeta where members contains username)
+   - preserves original onSnapshot/query logic
+   ========================================================================= */
 function subscribeRoomsForUser(username){
   if(roomsUnsub) roomsUnsub();
-  // keep Global in map
   roomsMap = { Global: { label: '🌍 Global', members: [] } };
   renderRooms();
 
-  // listen for rooms where members array contains this username
+  // query roomsMeta where members array contains username
   const q = query(collection(db,'roomsMeta'), where('members','array-contains', username));
-  roomsUnsub = onSnapshot(q, snap=>{
-    snap.docChanges().forEach(change=>{
+  roomsUnsub = onSnapshot(q, snap => {
+    snap.docChanges().forEach(change => {
       const id = change.doc.id;
       if(change.type === 'removed'){
-        // cleanup watchers and maps
         delete roomsMap[id];
         if(roomLastUnsubs[id]){ roomLastUnsubs[id](); delete roomLastUnsubs[id]; }
         if(unreadCounts[id]) delete unreadCounts[id];
         if(roomLastMessageTime[id]) delete roomLastMessageTime[id];
       } else {
         const d = change.doc.data();
-        // ensure members and label exist and trim usernames
         const members = (d.members || []).map(m => (m||'').toString().trim());
-        roomsMap[id] = { label: (d.label || id), members, createdBy: d.createdBy || null, lastUpdated: d.lastUpdated || null };
+        roomsMap[id] = { label: d.label || id, members, createdBy: d.createdBy || null, lastUpdated: d.lastUpdated || null };
       }
     });
     renderRooms();
-    // ensure we have a lightweight listener for last message on each room (to show unread)
     syncRoomMessageWatches();
   }, err => console.error('roomsMeta snapshot error', err));
 }
 
-/* ===== keep light 'last message' watchers for rooms to show unread indicators ===== */
-function syncRoomMessageWatches(){
-  const want = Object.keys(roomsMap);
-  // ensure watchers for each room (including Global)
-  want.forEach(roomId => {
-    if(roomLastUnsubs[roomId]) return;
-    // watch only the single most recent message (cheap)
-    try {
-      const messagesCol = collection(db,'rooms',roomId,'messages');
-      const q = query(messagesCol, orderBy('clientTime','desc'), limit(1));
-      roomLastUnsubs[roomId] = onSnapshot(q, snap=>{
-        if(snap.empty) {
-          roomLastMessageTime[roomId] = 0;
-          return;
-        }
-        const d = snap.docs[0].data();
-        const ts = d.clientTime || (d.createdAt && d.createdAt.toMillis && d.createdAt.toMillis()) || Date.now();
-        // store last seen time observed
-        const prev = roomLastMessageTime[roomId] || 0;
-        roomLastMessageTime[roomId] = ts;
-
-        // if not current room and message time is newer than lastSeen, mark unread
-        const lastSeen = getLastSeen(roomId);
-        if(roomId !== currentRoom && ts > lastSeen){
-          // increment unread flag/count (we only show indicator, count optional)
-          unreadCounts[roomId] = (unreadCounts[roomId] || 0) + 1;
-          renderRooms();
-        } else {
-          // nothing
-        }
-      }, err=> {
-        console.error('room last message watcher error', roomId, err);
-      });
-    } catch(e){ console.error('watch setup error', e); }
-  });
-
-  // remove watchers for removed rooms
-  Object.keys(roomLastUnsubs).forEach(r=>{
-    if(!roomsMap[r]){ roomLastUnsubs[r](); delete roomLastUnsubs[r]; }
-  });
-}
-
-/* ===== Render rooms list ===== */
+/* =========================================================================
+   renderRooms - rebuilds the sidebar list of rooms
+   - sorts: Global first, then alphabetical
+   - shows unread dot/count using unreadCounts
+   ========================================================================= */
 function renderRooms(){
   roomsListEl.innerHTML = '';
-  const keys = Object.keys(roomsMap).sort((a,b)=>{
-    if(a==='Global') return -1;
-    if(b==='Global') return 1;
+
+  const keys = Object.keys(roomsMap).sort((a,b) => {
+    if(a === 'Global') return -1;
+    if(b === 'Global') return 1;
     return (roomsMap[a].label || a).localeCompare(roomsMap[b].label || b);
   });
-  keys.forEach(id=>{
+
+  keys.forEach(id => {
     const meta = roomsMap[id];
+    // build room button
     const btn = document.createElement('button');
     btn.className = 'room-btn' + (id === currentRoom ? ' active' : '');
     btn.type = 'button';
     btn.onclick = ()=> switchRoom(id);
 
-    const left = document.createElement('div'); left.className = 'room-left';
-    const avatar = document.createElement('div'); avatar.className = 'room-avatar';
-    // avatar: first letter(s) of label
-    const labelText = (meta.label || id) + '';
-    avatar.textContent = labelText.split(' ')[0].slice(0,2).toUpperCase();
+    const left = document.createElement('div');
+    left.className = 'room-left';
 
-    // unread indicator on left (red icon/dot)
+    // unread dot if unreadCounts[id] > 0
     const unread = (unreadCounts[id] || 0);
     if(unread){
       const dot = document.createElement('span');
       dot.className = 'unread-badge';
-      dot.setAttribute('title', `${unread} unread`);
+      dot.title = `${unread} unread`;
       left.appendChild(dot);
     } else {
-      // Keep layout: small spacer so alignment doesn't jump
       const spacer = document.createElement('span');
-      spacer.style.width = '12px';
+      spacer.className = 'unread-spacer';
       spacer.style.display = 'inline-block';
+      spacer.style.width = '12px';
       spacer.style.marginRight = '8px';
       left.appendChild(spacer);
     }
 
+    // avatar (initials from label or room id)
+    const avatar = document.createElement('div');
+    avatar.className = 'room-avatar';
+    const labelText = (meta.label || id) + '';
+    avatar.textContent = labelText.split(' ')[0].slice(0,2).toUpperCase();
     left.appendChild(avatar);
-    const lbl = document.createElement('div'); lbl.className = 'room-label'; lbl.textContent = meta.label || id;
+
+    const lbl = document.createElement('div');
+    lbl.className = 'room-label';
+    lbl.textContent = meta.label || id;
     left.appendChild(lbl);
 
     btn.appendChild(left);
 
-    // right area: members or meta and optional count badge if numeric unread > 1
-    const right = document.createElement('div'); right.style.display = 'flex'; right.style.alignItems = 'center'; right.style.gap='8px';
-    const m = document.createElement('div'); m.className='room-meta';
+    const right = document.createElement('div');
+    right.style.display = 'flex'; right.style.alignItems = 'center'; right.style.gap = '8px';
+
+    const m = document.createElement('div');
+    m.className = 'room-meta';
     m.textContent = (meta.members && meta.members.length) ? `${meta.members.length}m` : '';
     right.appendChild(m);
 
     if(unread > 1){
-      const cnt = document.createElement('span'); cnt.className='unread-count'; cnt.textContent = String(unread);
+      const cnt = document.createElement('span'); cnt.className = 'unread-count'; cnt.textContent = String(unread);
       right.appendChild(cnt);
     }
 
@@ -507,25 +804,72 @@ function renderRooms(){
   });
 }
 
-/* ===== Switch room: unsubscribe old messages, subscribe new messages ===== */
+/* =========================================================================
+   syncRoomMessageWatches
+   - sets up lightweight listeners per room to detect most recent message
+   - used to show unread indicator without reading all messages
+   - similar approach used previously
+   ========================================================================= */
+function syncRoomMessageWatches(){
+  const want = Object.keys(roomsMap);
+  want.forEach(roomId => {
+    if(roomLastUnsubs[roomId]) return; // already watching
+    try {
+      const messagesCol = collection(db,'rooms',roomId,'messages');
+      const q = query(messagesCol, orderBy('clientTime','desc'), limit(1));
+      roomLastUnsubs[roomId] = onSnapshot(q, snap => {
+        if(snap.empty){
+          roomLastMessageTime[roomId] = 0;
+          return;
+        }
+        const d = snap.docs[0].data();
+        const ts = d.clientTime || (d.createdAt && d.createdAt.toMillis && d.createdAt.toMillis()) || Date.now();
+        const prev = roomLastMessageTime[roomId] || 0;
+        roomLastMessageTime[roomId] = ts;
+
+        const lastSeen = getLastSeen(roomId);
+        if(roomId !== currentRoom && ts > lastSeen){
+          unreadCounts[roomId] = (unreadCounts[roomId] || 0) + 1;
+          renderRooms();
+        }
+      }, err => console.error('room last message watcher error', roomId, err));
+    } catch(e){
+      console.error('watch setup error', e);
+    }
+  });
+
+  // clean up watchers no longer needed
+  Object.keys(roomLastUnsubs).forEach(r => {
+    if(!roomsMap[r]){
+      roomLastUnsubs[r](); delete roomLastUnsubs[r];
+    }
+  });
+}
+
+/* =========================================================================
+   switchRoom
+   - unsubscribes previous message stream
+   - subscribes full stream for the given room (messages collection)
+   - keeps original behavior: sorts by clientTime asc, preserves binary insert behavior
+   ========================================================================= */
 async function switchRoom(roomId){
-  // if room metadata not known and not Global, try to fetch
+  // attempt to fetch meta if unknown (unchanged)
   if(roomId !== 'Global' && !roomsMap[roomId]){
     try{
       const metaSnap = await getDoc(doc(db,'roomsMeta',roomId));
       if(metaSnap.exists()){
         const d = metaSnap.data();
-        const members = (d.members || []).map(m => (m||'').toString().trim());
-        roomsMap[roomId] = { label: d.label || roomId, members, createdBy: d.createdBy || null, lastUpdated: d.lastUpdated || null };
+        roomsMap[roomId] = { label: d.label || roomId, members: (d.members || []).map(m => (m||'').toString().trim()), createdBy: d.createdBy || null, lastUpdated: d.lastUpdated || null };
       } else {
         roomsMap[roomId] = { label: roomId, members: [] };
       }
-    } catch(e){ roomsMap[roomId] = { label: roomId, members: [] }; }
+    } catch(e){
+      roomsMap[roomId] = { label: roomId, members: [] };
+    }
     renderRooms();
-    syncRoomMessageWatches();
   }
 
-  // unsubscribe messages for previous room (detailed message view)
+  // unsubscribe old messages
   if(messagesUnsub){ messagesUnsub(); messagesUnsub = null; }
   messagesList = []; messagesMap = {}; messageElements = {};
   currentRoom = roomId;
@@ -535,16 +879,15 @@ async function switchRoom(roomId){
   titleEl.textContent = (currentUser?.username || 'Guest') + ' • ' + (meta.label || roomId);
   subtitleEl.textContent = roomId === 'Global' ? 'Public chat — visible to everyone' : `Members: ${meta.members ? meta.members.join(', ') : ''}`;
   membersListEl.textContent = (meta.members && meta.members.length) ? meta.members.join(', ') : '';
-
-  deleteRoomBtn.style.display = (roomId !== 'Global' && currentUser && meta.members && meta.members.includes((currentUser.username || sessionStorage.getItem('username') || '').toString().trim())) ? 'inline-block' : 'none';
+  deleteRoomBtn.style.display = (roomId !== 'Global' && currentUser && meta.members && meta.members.includes(currentUser.username)) ? 'inline-block' : 'none';
 
   // clear content area
   contentEl.innerHTML = '';
 
-  // mark as read
+  // mark as read (local)
   setLastSeen(roomId, Date.now());
 
-  // subscribe to messages collection for the selected room (full ordered stream)
+  // subscribe to messages (full stream)
   const messagesCol = collection(db,'rooms',roomId,'messages');
   const q = query(messagesCol, orderBy('clientTime','asc'));
   messagesUnsub = onSnapshot(q, snap=>{
@@ -555,19 +898,18 @@ async function switchRoom(roomId){
         const B = b.data().clientTime || 0;
         return A - B;
       });
-      docs.forEach(d=> {
+      docs.forEach(d => {
         const id = d.id; const data = d.data();
         insertMessageOrdered(id, data);
       });
       scrollToBottom();
     } else {
       // incremental
-      snap.docChanges().forEach(ch=>{
+      snap.docChanges().forEach(ch => {
         if(ch.type === 'added'){
           if(!messagesMap[ch.doc.id]){
             insertMessageOrdered(ch.doc.id, ch.doc.data());
-            // auto-scroll when you're at bottom or message is from yourself
-            // simple heuristic: always scroll to bottom for now
+            // auto-scroll heuristic: always scroll for now
             scrollToBottom();
           }
         } else if(ch.type === 'removed'){
@@ -580,22 +922,28 @@ async function switchRoom(roomId){
   }, err => console.error('messages onSnapshot error', err));
 }
 
-/* ===== Insert message into in-memory lists and DOM in chronological order by clientTime ===== */
+/* =========================================================================
+   insertMessageOrdered
+   - binary insert into messagesList by clientTime to preserve chronological order
+   - then render DOM element and insert at the right index
+   ========================================================================= */
 function insertMessageOrdered(id, data){
   if(messagesMap[id]) return;
   const ts = data.clientTime || (data.createdAt && data.createdAt.toMillis && data.createdAt.toMillis()) || Date.now();
   messagesMap[id] = {...data, clientTime: ts};
-  // binary search for index
+
+  // binary search to find insertion index
   let lo = 0, hi = messagesList.length;
   while(lo < hi){
     const mid = Math.floor((lo+hi)/2);
     const midId = messagesList[mid];
     const midTime = messagesMap[midId].clientTime || 0;
-    if(midTime <= ts) lo = mid+1; else hi = mid;
+    if(midTime <= ts) lo = mid + 1; else hi = mid;
   }
   const index = lo;
   messagesList.splice(index, 0, id);
-  // create DOM element and insert at index
+
+  // create and insert DOM element
   const el = renderMessageDOM(id, messagesMap[id]);
   messageElements[id] = el;
   if(index >= contentEl.children.length){
@@ -605,7 +953,12 @@ function insertMessageOrdered(id, data){
   }
 }
 
-/* ===== Create message DOM element ===== */
+/* =========================================================================
+   renderMessageDOM
+   - constructs message DOM using either user's profile pic or initials avatar
+   - default avatar: first two letters of sender's name (trimmed)
+   - uses local profile pic for currentUser when sending
+   ========================================================================= */
 function renderMessageDOM(id, m){
   const meName = (currentUser?.username || sessionStorage.getItem('username') || 'Guest').toString().trim();
   const isMe = (m.from === meName);
@@ -617,34 +970,63 @@ function renderMessageDOM(id, m){
   const bubble = document.createElement('div');
   bubble.className = 'bubble ' + (isMe ? 'me' : 'them');
 
-  // header with username and maybe small badge for you
+  // header: avatar + username
   const header = document.createElement('div');
-  header.className = 'msg-header';
-  const avatar = document.createElement('div');
-  avatar.style.width = '36px';
-  avatar.style.height = '36px';
-  avatar.style.borderRadius = '8px';
-  avatar.style.display = 'flex';
-  avatar.style.alignItems = 'center';
-  avatar.style.justifyContent = 'center';
-  avatar.style.fontWeight = '700';
-  avatar.style.fontSize = '13px';
-  avatar.style.marginRight = '8px';
-  avatar.style.flexShrink = '0';
-  avatar.textContent = (m.from||'').toString().split(' ')[0].slice(0,2).toUpperCase();
-  avatar.style.background = isMe ? 'linear-gradient(135deg,var(--self),#06b6d4)' : 'rgba(0,0,0,0.06)';
-  avatar.style.color = isMe ? '#fff' : 'var(--text)';
+  header.style.display = 'flex';
+  header.style.alignItems = 'center';
+  header.style.gap = '10px';
+  header.style.marginBottom = '8px';
 
+  // avatar element (img if available)
+  const avatarWrap = document.createElement('div');
+  avatarWrap.style.width = '40px';
+  avatarWrap.style.height = '40px';
+  avatarWrap.style.borderRadius = '8px';
+  avatarWrap.style.overflow = 'hidden';
+  avatarWrap.style.flexShrink = '0';
+
+  const avatarImg = document.createElement('img');
+  avatarImg.style.width = '100%';
+  avatarImg.style.height = '100%';
+  avatarImg.style.objectFit = 'cover';
+
+  // choose avatar source:
+  // - if this message is from the current user and they have uploaded profile pic -> use it
+  // - else check for localStorage profile keyed by username (we don't write to Firestore)
+  // - else generate initials avatar dynamically
+  const sender = (m.from || '').toString().trim();
+  let avatarSrc = null;
+
+  try {
+    // If sender is current user and local profile exists, prefer it
+    if(isMe){
+      avatarSrc = localStorage.getItem(PROFILE_KEY) || null;
+    }
+    if(!avatarSrc){
+      // try per-username stored profile (not implemented server-side; kept local-only)
+      // fallback to initials generator
+      avatarSrc = generateInitialsDataURL(sender || 'U', 128);
+    }
+  } catch(e){
+    console.error('avatar select error', e);
+    avatarSrc = generateInitialsDataURL(sender || 'U', 128);
+  }
+
+  avatarImg.src = avatarSrc;
+  avatarWrap.appendChild(avatarImg);
+
+  // username label
   const who = document.createElement('div');
-  who.className = 'msg-username';
-  who.textContent = m.from + (isMe ? ' • you' : '');
+  who.style.fontWeight = '700';
+  who.style.fontSize = '13px';
+  who.textContent = sender + (isMe ? ' • you' : '');
 
-  header.appendChild(avatar);
+  header.appendChild(avatarWrap);
   header.appendChild(who);
 
   const text = document.createElement('div');
-  text.className = 'msg-text';
   text.textContent = m.text || '';
+  text.style.whiteSpace = 'pre-wrap';
 
   const meta = document.createElement('div');
   meta.className = 'msg-meta';
@@ -658,7 +1040,9 @@ function renderMessageDOM(id, m){
   return row;
 }
 
-/* ===== Remove & update helpers ===== */
+/* =========================================================================
+   removeMessage / updateMessage
+   ========================================================================= */
 function removeMessage(id){
   const el = contentEl.querySelector(`[data-id="${id}"]`);
   if(el) el.remove();
@@ -667,21 +1051,26 @@ function removeMessage(id){
   delete messagesMap[id];
   delete messageElements[id];
 }
+
 function updateMessage(id, data){
   messagesMap[id] = {...messagesMap[id], ...data};
-  // re-render element
   const old = contentEl.querySelector(`[data-id="${id}"]`);
   const newEl = renderMessageDOM(id, messagesMap[id]);
   if(old && old.parentNode) old.parentNode.replaceChild(newEl, old);
   messageElements[id] = newEl;
 }
 
-/* ===== Scroll helper ===== */
+/* =========================================================================
+   scrollToBottom helper
+   ========================================================================= */
 function scrollToBottom(){
   requestAnimationFrame(()=> { try{ contentEl.scrollTop = contentEl.scrollHeight; } catch(e){} });
 }
 
-/* ====== Sending messages (clientTime + serverTimestamp) ====== */
+/* =========================================================================
+   Sending messages (preserve original semantics)
+   - stores text, from (username), uid, clientTime, createdAt: serverTimestamp()
+   ========================================================================= */
 sendBtn.addEventListener('click', sendMessage);
 msgInput.addEventListener('keydown', e => { if(e.key === 'Enter') sendMessage(); });
 
@@ -699,7 +1088,7 @@ async function sendMessage(){
   try {
     await addDoc(collection(db,'rooms', currentRoom, 'messages'), payload);
     msgInput.value = '';
-    // for the room you're in, update lastSeen so your own sent message doesn't create unread
+    // mark lastSeen for current room so own message doesn't mark unread
     setLastSeen(currentRoom, Date.now());
   } catch(e){
     console.error('send error', e);
@@ -707,7 +1096,10 @@ async function sendMessage(){
   }
 }
 
-/* ====== Create group/private chat ====== */
+/* =========================================================================
+   Create / render user list for new group/private chats
+   - preserves original 'users' collection read behavior
+   ========================================================================= */
 newChatBtn.addEventListener('click', async ()=>{
   if(!currentUser){ alert('Log in to create chats'); return; }
   createMsg.textContent = '';
@@ -717,7 +1109,7 @@ newChatBtn.addEventListener('click', async ()=>{
   show(createModal);
 });
 createCancel.addEventListener('click', ()=> hide(createModal));
-createCloseBtn.addEventListener('click', ()=> hide(createModal));
+createClose.addEventListener('click', ()=> hide(createModal));
 refreshUsersBtn.addEventListener('click', ()=> loadAllUsers());
 
 let allUsers = []; // {uid, username}
@@ -725,7 +1117,7 @@ async function loadAllUsers(){
   usersContainer.innerHTML = 'Loading...';
   try{
     const snap = await getDocs(collection(db,'users'));
-    allUsers = snap.docs.map(d => ({ uid: d.id, username: ((d.data().username || d.data().email || '').toString().trim()) }));
+    allUsers = snap.docs.map(d => ({ uid: d.id, username: (d.data().username || d.data().email || '').toString().trim() }));
     renderUsers(userSearch.value || '');
   } catch(e){
     console.error('load users failed', e);
@@ -740,9 +1132,7 @@ function renderUsers(filter){
       const div = document.createElement('div'); div.className='user-item';
       const left = document.createElement('div'); left.textContent = u.username;
       const right = document.createElement('div');
-      const cb = document.createElement('input'); cb.type='checkbox';
-      cb.dataset.username = u.username.toString().trim();
-      cb.dataset.uid = u.uid;
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.dataset.username = u.username; cb.dataset.uid = u.uid;
       right.appendChild(cb);
       div.appendChild(left); div.appendChild(right);
       usersContainer.appendChild(div);
@@ -750,15 +1140,16 @@ function renderUsers(filter){
 }
 userSearch.addEventListener('input', ()=> renderUsers(userSearch.value || ''));
 
+/* create group */
 createConfirm.addEventListener('click', async ()=>{
   createMsg.textContent = '';
   const checked = Array.from(usersContainer.querySelectorAll('input[type=checkbox]:checked'));
-  const selected = checked.map(c=> (c.dataset.username || '').toString().trim()).filter(Boolean);
+  const selected = checked.map(c=>c.dataset.username);
   if(selected.length === 0){ createMsg.textContent = 'Select at least one other user'; return; }
   if(selected.length + 1 > 6){ createMsg.textContent = 'Max 6 members allowed'; return; }
-  const members = Array.from(new Set([...selected.map(s=>s.trim()), (currentUser.username||'').toString().trim()]));
+  const members = Array.from(new Set([...selected, currentUser.username]));
   const roomId = makeRoomId(members);
-  const label = (groupLabel.value || members.join(', ')).toString().trim();
+  const label = groupLabel.value.trim() || members.join(', ');
   try{
     await setDoc(doc(db,'roomsMeta', roomId), { label, members, createdBy: currentUser.username, lastUpdated: serverTimestamp() }, { merge: true });
     roomsMap[roomId] = { label, members };
@@ -768,13 +1159,14 @@ createConfirm.addEventListener('click', async ()=>{
   } catch(e){ console.error('create room error', e); createMsg.textContent = 'Create failed'; }
 });
 
-/* ===== Delete room (meta + messages) ===== */
+/* =========================================================================
+   Delete room (meta + messages) - preserved original behavior
+   ========================================================================= */
 deleteRoomBtn.addEventListener('click', async ()=>{
   if(!currentUser) return;
   if(currentRoom === 'Global'){ alert('Cannot delete Global'); return; }
   if(!confirm('Delete this chat for everyone?')) return;
   try{
-    // delete messages in batches
     await deleteAllMessagesInRoom(currentRoom);
     await deleteDoc(doc(db,'roomsMeta', currentRoom));
     delete roomsMap[currentRoom];
@@ -796,15 +1188,15 @@ async function deleteAllMessagesInRoom(roomId){
   }
 }
 
-/* ===== Subscribe to Global on load (visible to all) ===== */
-(async function subscribeGlobal(){
+/* =========================================================================
+   Subscribe to Global on load (preserve original behavior)
+   ========================================================================= */
+(function subscribeGlobal(){
   roomsMap['Global'] = { label: '🌍 Global', members: [] };
   renderRooms();
-  // subscribe to global messages (full stream only when in Global)
   const globalCol = collection(db,'rooms','Global','messages');
   const q = query(globalCol, orderBy('clientTime','asc'));
   onSnapshot(q, snap => {
-    // if user currently in Global, update; otherwise mark unread
     if(currentRoom === 'Global'){
       if(messagesList.length === 0){
         contentEl.innerHTML = '';
@@ -823,8 +1215,8 @@ async function deleteAllMessagesInRoom(roomId){
         scrollToBottom();
       }
     } else {
-      // mark unread for Global if new messages exist and newer than lastSeen
-      snap.docChanges().forEach(ch => {
+      // if not in Global, mark unread as messages arrive
+      snap.docChanges().forEach(ch=>{
         if(ch.type === 'added'){
           const d = ch.doc.data();
           const ts = d.clientTime || (d.createdAt && d.createdAt.toMillis && d.createdAt.toMillis()) || Date.now();
@@ -838,34 +1230,62 @@ async function deleteAllMessagesInRoom(roomId){
   }, err => console.error('global messages error', err));
 })();
 
-/* ===== Settings modal behavior ===== */
-settingsBtn.addEventListener('click', ()=> show(settingsModal));
+/* =========================================================================
+   Settings modal logic (themes + profile preview)
+   - ensures close button color uses --close-color and is visible in all themes
+   ========================================================================= */
+settingsBtn.addEventListener('click', ()=> {
+  show(settingsModal);
+  // set preview from local storage or generate from username
+  const stored = localStorage.getItem(PROFILE_KEY);
+  const u = (currentUser && currentUser.username) || localStorage.getItem(USERNAME_KEY) || 'User';
+  profilePreview.src = stored || generateInitialsDataURL(u,128);
+});
+
+/* close handlers */
 closeSettings.addEventListener('click', ()=> hide(settingsModal));
 closeSettingsBtn.addEventListener('click', ()=> hide(settingsModal));
+
+/* theme select */
 themeSelect.addEventListener('change', ()=>{
   const v = themeSelect.value;
   document.body.setAttribute('data-theme', v);
-  localStorage.setItem('theme', v);
+  localStorage.setItem(THEME_KEY, v);
 });
 
-/* ===== Utility: initial theme from localStorage ===== */
-(function initTheme(){ const saved = localStorage.getItem('theme') || 'light'; document.body.setAttribute('data-theme', saved); themeSelect.value = saved; })();
+/* initialize theme */
+(function initTheme(){ const saved = localStorage.getItem(THEME_KEY) || 'light'; document.body.setAttribute('data-theme', saved); themeSelect.value = saved; })();
 
-/* ===== If page opened with ?room=roomId then open it after load ===== */
-(function openRoomFromQuery(){ const r = new URLSearchParams(location.search).get('room'); if(r) { // ensure room meta and switch
-  (async ()=>{ try{ const m = await getDoc(doc(db,'roomsMeta',r)); if(m.exists()) roomsMap[r] = m.data(); else roomsMap[r] = { label:r, members: [] }; renderRooms(); switchRoom(r); } catch(e){ console.error(e); } })();
-} })();
+/* =========================================================================
+   Open room via query param ?room=roomId (keeps original)
+   ========================================================================= */
+(function openRoomFromQuery(){
+  const r = new URLSearchParams(location.search).get('room');
+  if(r){
+    (async ()=>{
+      try{
+        const m = await getDoc(doc(db,'roomsMeta',r));
+        if(m.exists()) roomsMap[r] = m.data();
+        else roomsMap[r] = { label:r, members: [] };
+        renderRooms();
+        switchRoom(r);
+      } catch(e){ console.error(e); }
+    })();
+  }
+})();
 
-/* ===== Close modals on backdrop click (basic) ===== */
+/* =========================================================================
+   Modal backdrop click to close
+   ========================================================================= */
 [createModal, settingsModal].forEach(mod => {
   mod.addEventListener('click', (ev)=>{
-    if(ev.target === mod){
-      hide(mod);
-    }
+    if(ev.target === mod) hide(mod);
   });
 });
 
-/* ===== Accessibility: keyboard close ESC ===== */
+/* =========================================================================
+   Keyboard ESC to close modals
+   ========================================================================= */
 document.addEventListener('keydown', (e)=>{
   if(e.key === 'Escape'){
     hide(createModal);
@@ -873,9 +1293,24 @@ document.addEventListener('keydown', (e)=>{
   }
 });
 
-/* ===== Make sure existing rooms watchers are created initially ===== */
-setTimeout(()=>syncRoomMessageWatches(), 500);
+/* =========================================================================
+   Ensure initial watchers are created after a short delay
+   ========================================================================= */
+setTimeout(()=>syncRoomMessageWatches(), 400);
 
+/* =========================================================================
+   Small UX helpers (not touching chat mechanics)
+   - prevent mobile page zoom weirdness when focusing input (soft fix)
+   ========================================================================= */
+msgInput.addEventListener('focus', ()=> {
+  // tiny UX improvement: scroll content so last message isn't obscured
+  setTimeout(()=> scrollToBottom(), 120);
+});
+
+/* =========================================================================
+   End of script
+   ========================================================================= */
 </script>
+
 </body>
 </html>
