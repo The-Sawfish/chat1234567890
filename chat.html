@@ -21,6 +21,12 @@
   /* ==================================================================
      THEME VARIABLES (base)
      ================================================================== */
+  .chat-attachment {
+    margin: 5px 0;
+    display: flex;
+    align-items: center;
+}
+
   :root{
     --bg: #f5f7fa;
     --card: #ffffff;
@@ -1306,6 +1312,63 @@ msgInput.addEventListener('focus', ()=> {
   // tiny UX improvement: scroll content so last message isn't obscured
   setTimeout(()=> scrollToBottom(), 120);
 });
+
+// Assuming you store profile pics in Firebase Storage
+async function loadProfilePicture(userId, imgElement) {
+    try {
+        const url = await getProfilePicURL(userId); // Function to get Firebase URL
+        imgElement.src = url;
+        imgElement.style.objectFit = "cover";   // Ensures 85% ability to maintain aspect ratio
+        imgElement.style.width = "40px";        // Adjust size
+        imgElement.style.height = "40px";
+        imgElement.style.borderRadius = "50%";  // Circular display
+    } catch (error) {
+        console.error("Error loading profile pic:", error);
+        imgElement.src = "default-profile.png"; // fallback
+    }
+}
+
+// Example usage
+const profilePicElement = document.querySelector("#profile-pic");
+loadProfilePicture(currentUserId, profilePicElement);
+
+// Upload attachment to Firebase
+async function uploadAttachment(file) {
+    const storageRef = firebase.storage().ref(`attachments/${file.name}`);
+    const snapshot = await storageRef.put(file);
+    const url = await snapshot.ref.getDownloadURL();
+    return url;
+}
+
+// Display attachment in chat
+function displayAttachment(url, container) {
+    const attachment = document.createElement("div");
+    attachment.className = "chat-attachment";
+    
+    if (url.match(/\.(jpeg|jpg|gif|png)$/)) {
+        const img = document.createElement("img");
+        img.src = url;
+        img.style.maxWidth = "200px";
+        img.style.borderRadius = "8px";
+        attachment.appendChild(img);
+    } else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.textContent = "Download file";
+        link.target = "_blank";
+        attachment.appendChild(link);
+    }
+
+    container.appendChild(attachment);
+}
+
+// Example: On sending a file
+document.querySelector("#fileInput").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    const url = await uploadAttachment(file);
+    displayAttachment(url, document.querySelector("#chat-container"));
+});
+  
 
 /* =========================================================================
    End of script
