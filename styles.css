@@ -11,7 +11,7 @@
    ------------------------- */
 :root{
   /* primary layout sizing (adjusted to make the inner box smaller) */
-  --max-width: 980px;            /* was larger — reduced so box fits on most screens */
+  --max-width: 960px;            /* was larger — reduced so box fits on most screens */
   --container-gap: 12px;
   --sidebar-width: 250px;        /* slightly reduced from original for balance */
   --outer-padding: 10px;
@@ -107,7 +107,7 @@ body { overflow:hidden; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%
 
 /* the card that contains your whole chat UI */
 .container {
-  width: min(98vw, var(--max-width)); /* << smaller box so it fits */
+  width: min(96vw, var(--max-width)); /* << smaller box so it fits */
   max-width: var(--max-width);
   background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.35));
   border-radius: var(--radius);
