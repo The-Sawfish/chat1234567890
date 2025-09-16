@@ -1,1202 +1,1023 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Hybrid Chat — Live (Attachments + Profile Pics)</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Hybrid Chat — Live (Rewritten)</title>
 
-  <!--
-    Full chat.html rewrite, extended and verbose.
-    - Keeps original chat mechanics (roomsMeta, rooms/*/messages, Global)
-    - Adds Storage upload for profile pictures (users/{uid}.profilePic) and message attachments
-    - Reduces the inner container HEIGHT (not width) so the box fits the viewport better
-    - Heavily commented; preserve element IDs and JS hooks
-  -->
-
-  <style>
-    /* ============================================================================
-       HYBRID CHAT STYLESHEET
-       - Primary difference vs your earlier CSS: we reduce the container height
-         (so everything sits comfortably on mobile/desktop)
-       - Many helper classes added; avatar & attachment styles included
-       ============================================================================ */
-
-    :root{
-      /* Layout geometry (height reduced intentionally) */
-      --max-width: 1150px;
-      --container-gap: 14px;
-      --sidebar-width: 280px;
-
-      /* CRITICAL HEIGHT CHANGE: reduce inner box height so it fits screen better.
-         This is the key change you asked for (lessen height not width). */
-      --container-max-height: calc(100vh - 120px); /* <-- reduced: leaves 120px headroom */
-
-      /* Color tokens */
-      --bg: #f5f7fa;
-      --card: #ffffff;
-      --sidebar: #111827;
-      --accent: #2563eb;
-      --accent-2: #1e40af;
-      --text: #0f172a;
-      --muted: #6b7280;
-      --self: #0ea5a4;
-      --other: #eef2f7;
-      --danger: #ff5252;
-      --close-color: #0f172a;
-
-      /* geometry */
-      --radius: 12px;
-      --card-shadow: 0 10px 30px rgba(2,6,23,0.08);
-      --avatar-size: 40px;
-      --footer-height: 64px;
-    }
-
-    /* theme variations (kept from your previous file) */
-    [data-theme="dark"]{ --bg:#07111a; --card:#0f1724; --sidebar:#0b1220; --accent:#2563eb; --accent-2:#1e40af; --text:#e6eef6; --muted:#9fb0c5; --self:#06b6d4; --other:#15202b; --danger:#ff6b6b; --close-color:#e6eef6; --card-shadow: 0 10px 30px rgba(2,6,23,0.5); }
-    [data-theme="blue"]{ --bg:#eef7ff; --card:#ffffff; --sidebar:#0f172a; --accent:#0b5cff; --accent-2:#0645d8; --text:#0b1220; --muted:#394b6a; --self:#0b69ff; --other:#e6f0ff; --danger:#e63946; --close-color:#0b1220; }
-    [data-theme="green"]{ --bg:#ecfdf5; --card:#ffffff; --sidebar:#064e3b; --accent:#059669; --accent-2:#047857; --text:#064e3b; --muted:#0f766e; --self:#059669; --other:#d1fae5; --danger:#b91c1c; --close-color:#064e3b; }
-    [data-theme="purple"]{ --bg:#faf5ff; --card:#ffffff; --sidebar:#4c1d95; --accent:#7c3aed; --accent-2:#6d28d9; --text:#2e1065; --muted:#6b21a8; --self:#7c3aed; --other:#efe9ff; --danger:#b91c1c; --close-color:#2e1065; }
-    [data-theme="solar"]{ --bg:#fff8e6; --card:#fffefc; --sidebar:#b45309; --accent:#f59e0b; --accent-2:#f97316; --text:#4b2e05; --muted:#7c2d12; --self:#f97316; --other:#fff1d6; --danger:#b91c1c; --close-color:#4b2e05; }
-    [data-theme="contrast"]{ --bg:#000000; --card:#ffffff; --sidebar:#000000; --accent:#ffd400; --accent-2:#ffb400; --text:#000000; --muted:#333333; --self:#ffd400; --other:#ffffff; --danger:#ff4d4d; --close-color:#000000; }
-
-    /* reset & base */
-    *{ box-sizing: border-box; }
-    html,body{ height:100%; margin:0; font-family:Inter,system-ui,Arial,sans-serif; background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased; }
-    body{ overflow:hidden; }
-
-    /* outer container for centering on wide screens */
-    .outer {
-      display:flex;
-      align-items:flex-start;
-      justify-content:center;
-      min-height:100vh;
-      padding:12px;
-      gap:var(--container-gap);
-    }
-
-    /* main card: NOTE we set max-height to the reduced value above */
-    .container {
-      width:100%;
-      max-width:var(--max-width);
-      background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.4));
-      border-radius:var(--radius);
-      padding:12px;
-      box-shadow:var(--card-shadow);
-      display:flex;
-      gap:var(--container-gap);
-      align-items:stretch;
-      max-height: var(--container-max-height); /* << critical height reduction */
-      overflow: hidden;
-    }
-
-    /* sidebar */
-    .sidebar {
-      width:var(--sidebar-width);
-      min-width:88px;
-      background:var(--sidebar);
-      color:#fff;
-      border-radius:10px;
-      padding:12px;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-      flex-shrink:0;
-    }
-
-    .brand { display:flex; gap:10px; align-items:center; }
-    .logo {
-      width:44px; height:44px; border-radius:8px;
-      background:linear-gradient(135deg,var(--accent),var(--accent-2));
-      display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;
-    }
-    .brand .title { font-size:14px; font-weight:800; }
-
-    .rooms { flex:1; overflow:auto; padding-right:6px; -webkit-overflow-scrolling:touch; }
-
-    .room-btn { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px; border-radius:10px; background:transparent; border:0; color:#fff; margin-bottom:8px; cursor:pointer; font-weight:700; text-align:left; transition:background .12s, transform .06s; }
-    .room-btn:hover{ background: rgba(255,255,255,0.03); transform:translateY(-1px); }
-    .room-btn.active{ background: rgba(255,255,255,0.06); }
-
-    .room-left{ display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
-    .room-avatar{ width:36px; height:36px; border-radius:8px; background:rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; color:#fff; flex-shrink:0; }
-    .room-label{ flex:1; text-align:left; padding-right:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; }
-    .room-meta{ font-size:12px; color:rgba(255,255,255,0.75); }
-
-    .unread-badge{ width:12px; height:12px; border-radius:50%; background:var(--danger); margin-right:8px; box-shadow:0 0 0 3px rgba(0,0,0,0.12); flex-shrink:0; }
-    .unread-count{ min-width:18px; height:18px; border-radius:999px; background:var(--danger); display:inline-flex; align-items:center; justify-content:center; font-size:11px; padding:0 6px; margin-left:8px; color:#fff; }
-
-    .controls{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }
-    .btn{ padding:10px; border-radius:10px; border:0; background:var(--accent); color:#fff; cursor:pointer; font-weight:700; }
-    .btn-ghost{ padding:8px; border-radius:10px; border:1px solid rgba(255,255,255,0.06); background:transparent; color:#fff; cursor:pointer; }
-
-    /* main column */
-    .main{ flex:1; display:flex; flex-direction:column; background:var(--card); border-radius:10px; overflow:hidden; min-width:0; }
-
-    /* header - sticky */
-    .header{
-      display:flex; justify-content:space-between; align-items:center; padding:12px; background:linear-gradient(90deg,var(--accent),var(--accent-2)); color:#fff; position:sticky; top:0; z-index:10; flex-shrink:0;
-    }
-    .header .left{ display:flex; flex-direction:column; min-width:0; }
-    .title{ font-weight:800; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-    .subtitle{ font-size:12px; opacity:.95; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-
-    .header-right{ display:flex; gap:10px; align-items:center }
-
-    /* content area (scrollable) */
-    .content{
-      flex:1; overflow:auto; padding:16px; background:linear-gradient(180deg, rgba(0,0,0,0.02), transparent); -webkit-overflow-scrolling:touch; scroll-behavior:smooth;
-      padding-bottom:120px; /* allow room for sticky footer */
-    }
-
-    /* message row and bubble styling */
-    .message-row{ display:flex; margin:12px 0; clear:both; align-items:flex-end; max-width:100% }
-    .message-row.me{ justify-content:flex-end }
-    .bubble{ padding:10px 14px; border-radius:14px; max-width:72%; word-break:break-word; box-shadow:0 4px 18px rgba(2,6,23,0.06) }
-    .bubble.me{ background:var(--self); color:#fff; border-bottom-right-radius:6px }
-    .bubble.them{ background:var(--other); color:var(--text); border-bottom-left-radius:6px }
-
-    .message-header{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-    .message-avatar { width:var(--avatar-size); height:var(--avatar-size); border-radius:8px; overflow:hidden; flex-shrink:0; background:rgba(0,0,0,0.06); display:flex; align-items:center; justify-content:center; }
-    .message-avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
-
-    .msg-text{ white-space:pre-wrap; }
-    .msg-meta{ font-size:11px; opacity:.75; margin-top:6px; color:var(--muted) }
-
-    /* attachments inside a message bubble */
-    .chat-attachment { display:flex; align-items:center; gap:10px; margin-top:8px; }
-    .chat-attachment img { max-width:360px; max-height:360px; border-radius:8px; display:block; }
-    .chat-attachment a { text-decoration:none; color:var(--accent); font-weight:700; }
-
-    /* composer/footer (sticky at bottom of container) */
-    .footer{ display:flex; gap:8px; padding:10px; border-top:1px solid rgba(0,0,0,0.06); align-items:center; background:linear-gradient(180deg,transparent,rgba(0,0,0,0.02)); position:sticky; bottom:0; z-index:9; flex-shrink:0; height:var(--footer-height) }
-    .input{ flex:1; padding:12px; border-radius:12px; border:1px solid #e6eef6; min-width:0; outline:none }
-    .small{ font-size:13px; padding:8px 10px; border-radius:8px }
-
-    /* attachment previews inside composer */
-    .attachment-row{ display:flex; align-items:center; gap:8px; max-width:40%; overflow:auto; padding-left:4px; }
-    .attachment-preview{ width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid rgba(0,0,0,0.06) }
-
-    /* modals */
-    .modal{ position:fixed; left:0; top:0; right:0; bottom:0; background:rgba(0,0,0,0.45); display:none; align-items:center; justify-content:center; z-index:60; padding:12px }
-    .panel{ background:var(--card); padding:16px; border-radius:10px; min-width:320px; max-width:92%; color:var(--text); position:relative; max-height:92vh; overflow:auto; box-shadow:var(--card-shadow) }
-    .panel h3{ margin-top:0 }
-    .panel .panel-close{ position:absolute; right:12px; top:12px; border:0; background:transparent; cursor:pointer; font-size:18px; color:var(--close-color) }
-
-    .user-list{ max-height:260px; overflow:auto; border:1px solid #eee; padding:8px; border-radius:8px; margin:8px 0 }
-    .user-item{ display:flex; justify-content:space-between; align-items:center; padding:6px; border-bottom:1px solid #f0f0f0 }
-
-    /* small helpers & responsive */
-    .hidden{ display:none !important }
-    .muted{ color:var(--muted) }
-    .flex{ display:flex }
-    .gap8{ gap:8px }
-
-    @media (max-width:920px){
-      .sidebar{ width:92px; padding:8px }
-      .room-label{ display:none }
-      .container{ max-height: calc(100vh - 80px) } /* adjust smaller on small screens */
-      .attachment-preview{ width:48px; height:48px; }
-      .content{ padding:12px; padding-bottom:160px }
-    }
-
-    @media (max-width:480px){
-      .container{ padding:6px; max-height: calc(100vh - 64px); border-radius:10px }
-      .logo{ display:none }
-      .sidebar{ display:flex; flex-direction:column; align-items:center; width:72px }
-      .footer{ padding:8px; height:76px }
-      .content{ padding:10px 8px 180px 8px }
-      .panel{ width:100%; max-width:640px; border-radius:10px }
-    }
-
-    /* end of stylesheet */
-  </style>
+<!--
+  Full rewrite. Keep chat mechanics unchanged.
+  - Adds multiple themes (light/dark/blue/green/purple/solar/contrast)
+  - Fixes blue & green themes
+  - Profile pics: default = first 2 letters of trimmed username; user can upload in Settings
+  - Settings close button visible in all themes
+  - Prevents overflow on mobile (fits viewport)
+  - Unread red-dot indicator preserved
+  - Username trimming and sanitization kept (no trailing spaces create different rooms)
+  - Lots of inline comments, verbose formatting for readability
+-->
+    <link rel="stylesheet" href="styles.css">
 </head>
 
 <body data-theme="light">
-  <!--
-    HTML Structure
-    - Preserves original element IDs and structure.
-    - Adds attachment input & preview area in footer.
-    - Settings modal includes profile upload; will save to Firebase Storage.
-  -->
+<!-- ==================================================================
+     HTML STRUCTURE
+     ================================================================== -->
+<div class="outer" id="outer">
+  <div class="container" role="application" aria-label="Hybrid Chat App">
 
-  <div class="outer" id="outer">
-    <div class="container" role="application" aria-label="Hybrid Chat App">
-
-      <!-- Sidebar -->
-      <aside class="sidebar" aria-label="Sidebar">
-        <div class="brand" style="margin-bottom:6px">
-          <div class="logo">HC</div>
-          <div style="min-width:0">
-            <div class="title">Hybrid Chat</div>
-            <div style="font-size:12px;color:rgba(255,255,255,0.8)">Live — Global & Private Rooms</div>
-          </div>
-        </div>
-
-        <div class="rooms" id="roomsList" aria-live="polite" aria-atomic="true"></div>
-
-        <div class="controls">
-          <button id="newChatBtn" class="btn" title="New private/group chat">+ New Chat</button>
-          <div style="display:flex;gap:8px;margin-top:4px">
-            <button id="refreshUsers" class="btn-ghost" style="flex:1">Refresh</button>
-            <button id="settingsBtn" class="btn-ghost" style="flex:1">Settings</button>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:6px">
-            <button id="loginBtn" class="btn-ghost" style="flex:1">Login</button>
-            <button id="deleteRoomBtn" class="btn-ghost" style="flex:1;display:none">Delete</button>
-          </div>
-        </div>
-      </aside>
-
-      <!-- Main -->
-      <main class="main" role="main">
-        <div class="header">
-          <div class="left">
-            <div id="title" class="title">—</div>
-            <div id="subtitle" class="subtitle">—</div>
-          </div>
-
-          <div class="header-right">
-            <div id="membersList" style="font-size:13px;opacity:.95;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
-          </div>
-        </div>
-
-        <div id="content" class="content" role="log" aria-live="polite" aria-atomic="false">
-          <!-- messages injected here -->
-        </div>
-
-        <div class="footer" role="region" aria-label="Message composer">
-          <input id="msgInput" class="input" placeholder="Type a message…" disabled aria-label="Message input" />
-          <!-- Attach button & hidden file input -->
-          <input id="attachmentInput" type="file" multiple style="display:none" />
-          <button id="attachBtn" class="btn-ghost small" title="Attach files">📎</button>
-          <!-- attachment previews -->
-          <div id="attachmentPreview" class="attachment-row" aria-hidden="true" style="display:none"></div>
-          <button id="sendBtn" class="btn small" disabled>Send</button>
-        </div>
-      </main>
-
-    </div>
-  </div>
-
-  <!-- Create chat modal -->
-  <div id="createModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="panel" role="document" aria-labelledby="createTitle">
-      <button id="createClose" class="panel-close" aria-label="Close">✕</button>
-      <h3 id="createTitle">Create private/group chat (max 6)</h3>
-      <div style="font-size:13px;color:var(--muted)">Select up to 5 other users (creator counts as 1; max 6 total).</div>
-
-      <input id="userSearch" placeholder="Search username..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;margin-top:10px" />
-      <div id="usersContainer" class="user-list" role="list"></div>
-      <input id="groupLabel" placeholder="Optional chat label" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;margin-top:8px" />
-
-      <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
-        <button id="createCancel" class="btn-ghost small">Cancel</button>
-        <button id="createConfirm" class="btn small">Create</button>
-      </div>
-
-      <div id="createMsg" style="color:var(--danger);margin-top:8px;font-size:13px"></div>
-    </div>
-  </div>
-
-  <!-- Settings modal -->
-  <div id="settingsModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="panel" role="document" aria-labelledby="settingsTitle">
-      <button id="closeSettings" class="panel-close" aria-label="Close settings">✕</button>
-      <h3 id="settingsTitle">Settings</h3>
-
-      <label style="display:block;margin-top:8px">Theme</label>
-      <select id="themeSelect" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;border:1px solid #ddd">
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-        <option value="blue">Blue</option>
-        <option value="green">Green</option>
-        <option value="purple">Purple</option>
-        <option value="solar">Solar</option>
-        <option value="contrast">High Contrast</option>
-      </select>
-
-      <label style="display:block;margin-top:12px">Profile picture (optional — will be uploaded)</label>
-      <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
-        <div id="profilePreviewWrap" style="width:64px;height:64px;border-radius:10px;background:rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:center;overflow:hidden">
-          <img id="profilePreview" alt="profile preview" style="width:100%;height:100%;object-fit:cover" />
-        </div>
-        <div style="flex:1">
-          <input id="profileUpload" type="file" accept="image/*" />
-          <div style="font-size:12px;color:var(--muted);margin-top:6px">Or leave blank to use initials-based avatar (first two letters of your username).</div>
-          <div id="profileUploadStatus" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+    <!-- SIDEBAR -->
+    <aside class="sidebar" aria-label="Sidebar">
+      <div class="brand" style="margin-bottom:6px">
+        <div class="logo">HC</div>
+        <div style="min-width:0">
+          <div class="title">Hybrid Chat</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.8)">Live — Global & Private Rooms</div>
         </div>
       </div>
 
-      <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
-        <button id="closeSettingsBtn" class="btn-ghost small">Close</button>
+      <div class="rooms" id="roomsList" aria-live="polite" aria-atomic="true">
+        <!-- rooms will be injected here -->
+      </div>
+
+      <div class="controls">
+        <button id="newChatBtn" class="btn" title="New private/group chat">+ New Chat</button>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button id="refreshUsers" class="btn-ghost" style="flex:1">Refresh</button>
+          <button id="settingsBtn" class="btn-ghost" style="flex:1">Settings</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button id="loginBtn" class="btn-ghost" style="flex:1">Login</button>
+          <button id="deleteRoomBtn" class="btn-ghost" style="flex:1;display:none">Delete</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main" role="main">
+      <div class="header">
+        <div class="left">
+          <div id="title" class="title">—</div>
+          <div id="subtitle" class="subtitle">—</div>
+        </div>
+
+        <div class="header-right">
+          <div id="membersList" style="font-size:13px;opacity:.95;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+        </div>
+      </div>
+
+      <div id="content" class="content" role="log" aria-live="polite" aria-atomic="false">
+        <!-- messages injected here -->
+      </div>
+
+      <div class="footer" role="region" aria-label="Message composer">
+        <input id="msgInput" class="input" placeholder="Type a message…" disabled aria-label="Message input" />
+        <button id="sendBtn" class="btn small" disabled>Send</button>
+      </div>
+    </main>
+
+  </div>
+</div>
+
+<!-- CREATE CHAT MODAL -->
+<div id="createModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="panel" role="document" aria-labelledby="createTitle">
+    <button id="createClose" class="panel-close" aria-label="Close">✕</button>
+    <h3 id="createTitle">Create private/group chat (max 6)</h3>
+    <div style="font-size:13px;color:var(--muted)">Select up to 5 other users (creator counts as 1; max 6 total).</div>
+
+    <input id="userSearch" placeholder="Search username..." style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;margin-top:10px" />
+
+    <div id="usersContainer" class="user-list" role="list"></div>
+
+    <input id="groupLabel" placeholder="Optional chat label" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;margin-top:8px" />
+
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+      <button id="createCancel" class="btn-ghost small">Cancel</button>
+      <button id="createConfirm" class="btn small">Create</button>
+    </div>
+
+    <div id="createMsg" style="color:var(--danger);margin-top:8px;font-size:13px"></div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div id="settingsModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="panel" role="document" aria-labelledby="settingsTitle">
+    <button id="closeSettings" class="panel-close" aria-label="Close settings">✕</button>
+    <h3 id="settingsTitle">Settings</h3>
+
+    <label style="display:block;margin-top:8px">Theme</label>
+    <select id="themeSelect" style="width:100%;padding:10px;margin-top:8px;border-radius:8px;border:1px solid #ddd">
+      <option value="light">Light</option>
+      <option value="dark">Dark</option>
+      <option value="blue">Blue</option>
+      <option value="green">Green</option>
+      <option value="purple">Purple</option>
+      <option value="solar">Solar</option>
+      <option value="contrast">High Contrast</option>
+    </select>
+
+    <label style="display:block;margin-top:12px">Profile picture (optional)</label>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+      <div id="profilePreviewWrap" style="width:64px;height:64px;border-radius:10px;background:rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:center;overflow:hidden">
+        <img id="profilePreview" alt="profile preview" style="width:100%;height:100%;object-fit:cover" />
+      </div>
+      <div style="flex:1">
+        <input id="profileUpload" type="file" accept="image/*" />
+        <div style="font-size:12px;color:var(--muted);margin-top:6px">Or leave blank to use initials-based avatar (first two letters of your username).</div>
       </div>
     </div>
+
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+      <button id="closeSettingsBtn" class="btn-ghost small">Close</button>
+    </div>
   </div>
+</div>
 
-  <!-- room template (hidden) -->
-  <template id="roomTemplate">
-    <button class="room-btn" type="button">
-      <div class="room-left">
-        <span class="unread-spacer" style="width:12px;display:inline-block"></span>
-        <div class="room-avatar">--</div>
-        <div class="room-label">Room label</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <div class="room-meta muted">0m</div>
-      </div>
-    </button>
-  </template>
+<!-- small hidden an accessible template area -->
+<template id="roomTemplate">
+  <button class="room-btn" type="button">
+    <div class="room-left">
+      <span class="unread-spacer" style="width:12px;display:inline-block"></span>
+      <div class="room-avatar">--</div>
+      <div class="room-label">Room label</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="room-meta muted">0m</div>
+    </div>
+  </button>
+</template>
 
-  <!--
-    JAVASCRIPT
-    - Firestore + Storage modular imports
-    - Attachment upload and profile pic upload logic included
-    - Extensive comments
-  -->
-  <script type="module">
-    /**********************************************************************
-     * Firebase modular imports
-     * - Firestore (already used in mechanics)
-     * - Storage (added for attachments & profile pics)
-     **********************************************************************/
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
-    import {
-      getFirestore, collection, doc, getDoc, setDoc, addDoc,
-      query, where, orderBy, onSnapshot, serverTimestamp, getDocs,
-      writeBatch, deleteDoc, limit
-    } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
-    import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
+<!-- ==================================================================
+     JAVASCRIPT - Firebase + App Logic (formatted + commented)
+     ================================================================== -->
+<script type="module">
+/* =========================================================================
+   Firebase modular v12 imports
+   (kept the same - do not alter these lines unless you update firebase)
+   ========================================================================= */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDoc, setDoc, addDoc,
+  query, where, orderBy, onSnapshot, serverTimestamp, getDocs,
+  writeBatch, deleteDoc, limit
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-    /**********************************************************************
-     * CONFIG - Your existing Firebase config (keep unchanged)
-     **********************************************************************/
-    const firebaseConfig = {
-      apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
-      authDomain: "hybridchat-8a96c.firebaseapp.com",
-      projectId: "hybridchat-8a96c",
-      storageBucket: "hybridchat-8a96c.firebasestorage.app",
-      messagingSenderId: "8350065462",
-      appId: "1:8350065462:web:779c8fd3c81acaeebc8997"
-    };
+/* =========================================================================
+   Firebase config - keep yours exactly (unchanged)
+   ========================================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyA0m8RzkSmIgdPxvyMqW6SKsNLa_EvZJ9w",
+  authDomain: "hybridchat-8a96c.firebaseapp.com",
+  projectId: "hybridchat-8a96c",
+  storageBucket: "hybridchat-8a96c.firebasestorage.app",
+  messagingSenderId: "8350065462",
+  appId: "1:8350065462:web:779c8fd3c81acaeebc8997"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-    // initialize
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const storage = getStorage(app);
+/* =========================================================================
+   UI references
+   ========================================================================= */
+const roomsListEl = document.getElementById('roomsList');
+const contentEl = document.getElementById('content');
+const titleEl = document.getElementById('title');
+const subtitleEl = document.getElementById('subtitle');
+const membersListEl = document.getElementById('membersList');
+const msgInput = document.getElementById('msgInput');
+const sendBtn = document.getElementById('sendBtn');
+const newChatBtn = document.getElementById('newChatBtn');
+const createModal = document.getElementById('createModal');
+const usersContainer = document.getElementById('usersContainer');
+const userSearch = document.getElementById('userSearch');
+const createConfirm = document.getElementById('createConfirm');
+const createCancel = document.getElementById('createCancel');
+const createMsg = document.getElementById('createMsg');
+const groupLabel = document.getElementById('groupLabel');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsModal = document.getElementById('settingsModal');
+const closeSettings = document.getElementById('closeSettings');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+const themeSelect = document.getElementById('themeSelect');
+const loginBtn = document.getElementById('loginBtn');
+const refreshUsersBtn = document.getElementById('refreshUsers');
+const deleteRoomBtn = document.getElementById('deleteRoomBtn');
+const profileUpload = document.getElementById('profileUpload');
+const profilePreview = document.getElementById('profilePreview');
+const createClose = document.getElementById('createClose');
 
-    /**********************************************************************
-     * UI refs - preserved element IDs (so original logic remains intact)
-     **********************************************************************/
-    const roomsListEl = document.getElementById('roomsList');
-    const contentEl = document.getElementById('content');
-    const titleEl = document.getElementById('title');
-    const subtitleEl = document.getElementById('subtitle');
-    const membersListEl = document.getElementById('membersList');
-    const msgInput = document.getElementById('msgInput');
-    const sendBtn = document.getElementById('sendBtn');
-    const newChatBtn = document.getElementById('newChatBtn');
-    const createModal = document.getElementById('createModal');
-    const usersContainer = document.getElementById('usersContainer');
-    const userSearch = document.getElementById('userSearch');
-    const createConfirm = document.getElementById('createConfirm');
-    const createCancel = document.getElementById('createCancel');
-    const createMsg = document.getElementById('createMsg');
-    const groupLabel = document.getElementById('groupLabel');
-    const settingsBtn = document.getElementById('settingsBtn');
-    const settingsModal = document.getElementById('settingsModal');
-    const closeSettings = document.getElementById('closeSettings');
-    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
-    const themeSelect = document.getElementById('themeSelect');
-    const loginBtn = document.getElementById('loginBtn');
-    const refreshUsersBtn = document.getElementById('refreshUsers');
-    const deleteRoomBtn = document.getElementById('deleteRoomBtn');
-    const profileUpload = document.getElementById('profileUpload');
-    const profilePreview = document.getElementById('profilePreview');
-    const profileUploadStatus = document.getElementById('profileUploadStatus');
-    const createClose = document.getElementById('createClose');
-    const attachmentInput = document.getElementById('attachmentInput');
-    const attachBtn = document.getElementById('attachBtn');
-    const attachmentPreview = document.getElementById('attachmentPreview');
+/* =========================================================================
+   App State (kept similar to your original)
+   ========================================================================= */
+let currentUser = null; // { uid, email, username }
+let currentRoom = 'Global';
+let roomsMap = { Global: { label: '🌍 Global', members: [] } }; // roomId -> meta
+let roomsUnsub = null;
+let messagesUnsub = null;
+let messagesList = []; // ordered array of message ids for currentRoom
+let messagesMap = {};  // id -> data
+let messageElements = {}; // id -> DOM element
 
-    /**********************************************************************
-     * App state
-     **********************************************************************/
-    let currentUser = null;
-    let currentRoom = 'Global';
-    let roomsMap = { Global: { label: '🌍 Global', members: [] } };
-    let roomsUnsub = null;
-    let messagesUnsub = null;
-    let messagesList = [];
-    let messagesMap = {};
-    let messageElements = {};
+/* lightweight watchers for unread status (keeps original unread behavior) */
+const roomLastUnsubs = {}; // roomId -> unsubscribe fn
+const unreadCounts = {};   // roomId -> number
+const roomLastMessageTime = {}; // roomId -> timestamp of last message observed
 
-    // watchers for unread
-    const roomLastUnsubs = {};
-    const unreadCounts = {};
-    const roomLastMessageTime = {};
+/* local user customization (profile pic stored locally in localStorage as dataURL) */
+const USERNAME_KEY = 'hc_username';
+const THEME_KEY = 'hc_theme';
+const PROFILE_KEY = 'hc_profilepic';
 
-    // local keys
-    const USERNAME_KEY = 'hc_username';
-    const THEME_KEY = 'hc_theme';
-    const PROFILE_KEY = 'hc_profilepic';
+/* =========================================================================
+   Utilities
+   ========================================================================= */
 
-    // temp attachments staged before send
-    let stagedAttachments = []; // array of File objects
+/**
+ * sanitize - trim and normalize username strings to prevent trailing-space duplicates
+ *   - collapse whitespace to single underscores, remove non-word except hyphen, lowercase
+ * This is intentionally conservative to keep roomId generation stable.
+ */
+function sanitize(name){
+  if(!name) return '';
+  return name.toString().trim().replace(/\s+/g,'_').replace(/[^\w\-]/g,'').toLowerCase();
+}
 
-    // cache of users (uid -> {username, profilePic})
-    const usersCache = {};
+/**
+ * makeRoomId - from an array of usernames (strings) create canonical room id
+ *  - uses sanitized, sorted usernames joined by '__'
+ */
+function makeRoomId(usernames){
+  return usernames.map(s => (s||'').toString().trim()).map(s => sanitize(s)).sort().join('__');
+}
 
-    /**********************************************************************
-     * Utility functions (sanitize, makeRoomId, show/hide, fmtTime)
-     **********************************************************************/
-    function sanitize(name){ if(!name) return ''; return name.toString().trim().replace(/\s+/g,'_').replace(/[^\w\-]/g,'').toLowerCase(); }
-    function makeRoomId(usernames){ return usernames.map(s => (s||'').toString().trim()).map(s => sanitize(s)).sort().join('__'); }
-    function show(el){ el.style.display = 'flex'; el.setAttribute('aria-hidden','false'); }
-    function hide(el){ el.style.display = 'none'; el.setAttribute('aria-hidden','true'); }
-    function fmtTime(msOrDate){ if(!msOrDate) return ''; const d = (typeof msOrDate === 'number') ? new Date(msOrDate) : (msOrDate.toDate ? msOrDate.toDate() : new Date(msOrDate)); return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); }
+/* show/hide helpers for modals */
+function show(el){ el.style.display = 'flex'; el.setAttribute('aria-hidden','false'); }
+function hide(el){ el.style.display = 'none'; el.setAttribute('aria-hidden','true'); }
 
-    function getLastSeen(roomId){ const key = 'lastSeen_' + roomId; const v = localStorage.getItem(key); return v ? Number(v) : 0; }
-    function setLastSeen(roomId, ts = Date.now()){ localStorage.setItem('lastSeen_' + roomId, String(ts)); unreadCounts[roomId] = 0; renderRooms(); }
+/* format time for message meta */
+function fmtTime(msOrDate){
+  if(!msOrDate) return '';
+  const d = (typeof msOrDate === 'number') ? new Date(msOrDate) : (msOrDate.toDate ? msOrDate.toDate() : new Date(msOrDate));
+  return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+}
 
-    /**********************************************************************
-     * Avatar helper: generate initials PNG dataURL (fallback)
-     **********************************************************************/
-    function generateInitialsDataURL(name, size=128, bg=null, textColor='#fff'){
-      const initials = (name||'').toString().trim().slice(0,2).toUpperCase() || 'U';
-      const colors = ['#0b5cff','#06b6d4','#10b981','#7c3aed','#f97316','#2563eb','#ef4444'];
-      const idx = (initials.charCodeAt(0) || 65) % colors.length;
-      const bgColor = bg || colors[idx];
-      const canvas = document.createElement('canvas'); canvas.width=size; canvas.height=size;
-      const ctx = canvas.getContext('2d'); ctx.fillStyle = bgColor; ctx.fillRect(0,0,size,size);
-      ctx.fillStyle = textColor; ctx.font = `bold ${Math.floor(size*0.42)}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(initials, size/2, size/2+2);
-      return canvas.toDataURL('image/png');
+/* get/set last seen for a room (localStorage-based; does not touch Firestore) */
+function getLastSeen(roomId){
+  const key = 'lastSeen_' + roomId;
+  const v = localStorage.getItem(key);
+  return v ? Number(v) : 0;
+}
+function setLastSeen(roomId, ts = Date.now()){
+  localStorage.setItem('lastSeen_' + roomId, String(ts));
+  unreadCounts[roomId] = 0;
+  renderRooms(); // refresh UI
+}
+
+/* =========================================================================
+   Avatar generation and profile pic handling
+   - Default avatar: first TWO letters of trimmed username, capitalized
+   - User can upload an image; stored locally in localStorage as dataURL
+   ========================================================================= */
+
+/**
+ * generateInitialsDataURL(name, size=128, bgColor, textColor)
+ * Returns a data URL for a square PNG with initials centered.
+ */
+function generateInitialsDataURL(name, size=128, bg=null, textColor='#fff'){
+  const initials = (name||'').toString().trim().slice(0,2).toUpperCase() || 'U';
+  // easy deterministic background color choice based on initials
+  const colors = ['#0b5cff','#06b6d4','#10b981','#7c3aed','#f97316','#2563eb','#ef4444'];
+  const idx = (initials.charCodeAt(0) || 65) % colors.length;
+  const bgColor = bg || colors[idx];
+  // canvas render
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  // background
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0,0,size,size);
+  // initials text
+  ctx.fillStyle = textColor;
+  ctx.font = `bold ${Math.floor(size*0.42)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(initials, size/2, size/2+2);
+  return canvas.toDataURL('image/png');
+}
+
+/* get profile pic for current user:
+   - if user uploaded pic stored in localStorage -> return it
+   - else fallback to generated initials based on username
+*/
+function getLocalProfilePic(username){
+  const stored = localStorage.getItem(PROFILE_KEY);
+  if(stored) return stored;
+  return generateInitialsDataURL(username || (currentUser && currentUser.username) || 'U');
+}
+
+/* wire up profile preview control */
+profilePreview.src = getLocalProfilePic(localStorage.getItem(USERNAME_KEY) || 'User');
+profileUpload.addEventListener('change', (ev) => {
+  const f = ev.target.files && ev.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const dataUrl = e.target.result;
+      localStorage.setItem(PROFILE_KEY, dataUrl);
+      profilePreview.src = dataUrl;
+    } catch(err) {
+      console.error('profile store error', err);
+      alert('Failed to save profile image locally.');
     }
+  };
+  reader.readAsDataURL(f);
+});
 
-    /**********************************************************************
-     * Users cache sync
-     * - Keep a local cache of users (uid -> { username, profilePic })
-     * - Use onSnapshot so profilePic changes propagate
-     **********************************************************************/
-    function initUsersWatch(){
-      try {
-        const q = query(collection(db,'users'));
-        // snapshot-driven cache
-        onSnapshot(q, snap => {
-          snap.docs.forEach(d => {
-            const uid = d.id; const data = d.data() || {};
-            usersCache[uid] = { username: (data.username || ''), profilePic: data.profilePic || null };
-          });
-          // refresh visible UI (avatars may have changed)
-          // re-render current content avatars
-          Object.keys(messageElements).forEach(id => {
-            const el = messageElements[id];
-            if(el) {
-              const mid = el.dataset.id;
-              const msg = messagesMap[mid];
-              if(msg) {
-                // replace avatar img if profilePic available
-                const imgEl = el.querySelector('img[data-avatar-for]');
-                if(imgEl && usersCache[msg.uid] && usersCache[msg.uid].profilePic){
-                  imgEl.src = usersCache[msg.uid].profilePic;
-                }
-              }
-            }
-          });
-          // update users listing if open
-          renderUsers(userSearch.value || '');
-        }, err => console.error('users onSnapshot error', err));
-      } catch(e){
-        console.error('initUsersWatch failed', e);
-      }
-    }
-    // call immediately to ensure cache attempts to populate
-    initUsersWatch();
-
-    /**********************************************************************
-     * Rooms subscription for a username
-     **********************************************************************/
-    function subscribeRoomsForUser(username){
-      if(roomsUnsub) roomsUnsub();
-      roomsMap = { Global: { label: '🌍 Global', members: [] } };
-      renderRooms();
-
-      const q = query(collection(db,'roomsMeta'), where('members','array-contains', username));
-      roomsUnsub = onSnapshot(q, snap => {
-        snap.docChanges().forEach(change => {
-          const id = change.doc.id;
-          if(change.type === 'removed'){
-            delete roomsMap[id];
-            if(roomLastUnsubs[id]){ roomLastUnsubs[id](); delete roomLastUnsubs[id]; }
-            if(unreadCounts[id]) delete unreadCounts[id];
-            if(roomLastMessageTime[id]) delete roomLastMessageTime[id];
-          } else {
-            const d = change.doc.data();
-            const members = (d.members || []).map(m => (m||'').toString().trim());
-            roomsMap[id] = { label: d.label || id, members, createdBy: d.createdBy || null, lastUpdated: d.lastUpdated || null };
-          }
-        });
-        renderRooms();
-        syncRoomMessageWatches();
-      }, err => console.error('roomsMeta snapshot error', err));
-    }
-
-    /**********************************************************************
-     * Render rooms
-     **********************************************************************/
-    function renderRooms(){
-      roomsListEl.innerHTML = '';
-      const keys = Object.keys(roomsMap).sort((a,b) => {
-        if(a === 'Global') return -1;
-        if(b === 'Global') return 1;
-        return (roomsMap[a].label || a).localeCompare(roomsMap[b].label || b);
-      });
-      keys.forEach(id => {
-        const meta = roomsMap[id];
-        const btn = document.createElement('button');
-        btn.className = 'room-btn' + (id === currentRoom ? ' active' : '');
-        btn.type = 'button';
-        btn.onclick = ()=> switchRoom(id);
-
-        const left = document.createElement('div'); left.className = 'room-left';
-        const unread = (unreadCounts[id] || 0);
-
-        if(unread){
-          const dot = document.createElement('span'); dot.className = 'unread-badge'; dot.title = `${unread} unread`; left.appendChild(dot);
-        } else {
-          const spacer = document.createElement('span'); spacer.style.width='12px'; spacer.style.display='inline-block'; spacer.style.marginRight='8px'; left.appendChild(spacer);
-        }
-
-        const avatar = document.createElement('div'); avatar.className = 'room-avatar';
-        const labelText = (meta.label || id)+'';
-        avatar.textContent = labelText.split(' ')[0].slice(0,2).toUpperCase();
-        left.appendChild(avatar);
-
-        const lbl = document.createElement('div'); lbl.className = 'room-label'; lbl.textContent = meta.label || id; left.appendChild(lbl);
-
-        btn.appendChild(left);
-
-        const right = document.createElement('div'); right.style.display='flex'; right.style.alignItems='center'; right.style.gap='8px';
-        const m = document.createElement('div'); m.className = 'room-meta'; m.textContent = (meta.members && meta.members.length) ? `${meta.members.length}m` : '';
-        right.appendChild(m);
-
-        if(unread > 1){
-          const cnt = document.createElement('span'); cnt.className = 'unread-count'; cnt.textContent = String(unread);
-          right.appendChild(cnt);
-        }
-
-        btn.appendChild(right);
-        roomsListEl.appendChild(btn);
-      });
-    }
-
-    /**********************************************************************
-     * Lightweight watchers for last message per room (unread indicator)
-     **********************************************************************/
-    function syncRoomMessageWatches(){
-      const want = Object.keys(roomsMap);
-      want.forEach(roomId => {
-        if(roomLastUnsubs[roomId]) return;
-        try {
-          const messagesCol = collection(db,'rooms',roomId,'messages');
-          const q = query(messagesCol, orderBy('clientTime','desc'), limit(1));
-          roomLastUnsubs[roomId] = onSnapshot(q, snap => {
-            if(snap.empty){ roomLastMessageTime[roomId] = 0; return; }
-            const d = snap.docs[0].data();
-            const ts = d.clientTime || (d.createdAt && d.createdAt.toMillis && d.createdAt.toMillis()) || Date.now();
-            roomLastMessageTime[roomId] = ts;
-            const lastSeen = getLastSeen(roomId);
-            if(roomId !== currentRoom && ts > lastSeen){
-              unreadCounts[roomId] = (unreadCounts[roomId] || 0) + 1;
-              renderRooms();
-            }
-          }, err => console.error('room last message watcher error', roomId, err));
-        } catch(e){ console.error('watch setup error', e); }
-      });
-
-      // cleanup watchers for missing rooms
-      Object.keys(roomLastUnsubs).forEach(r => { if(!roomsMap[r]){ roomLastUnsubs[r](); delete roomLastUnsubs[r]; } });
-    }
-
-    /**********************************************************************
-     * switchRoom - unsubscribe previous, subscribe new messages stream
-     **********************************************************************/
-    async function switchRoom(roomId){
-      if(roomId !== 'Global' && !roomsMap[roomId]){
-        try {
-          const metaSnap = await getDoc(doc(db,'roomsMeta',roomId));
-          if(metaSnap.exists()){ const d = metaSnap.data(); roomsMap[roomId] = { label: d.label || roomId, members: (d.members||[]).map(m=> (m||'').toString().trim()), createdBy: d.createdBy || null, lastUpdated: d.lastUpdated || null }; }
-          else roomsMap[roomId] = { label: roomId, members: [] };
-        } catch(e){ roomsMap[roomId] = { label: roomId, members: [] }; }
-        renderRooms();
-      }
-
-      if(messagesUnsub){ messagesUnsub(); messagesUnsub = null; }
-      messagesList = []; messagesMap = {}; messageElements = {};
-      currentRoom = roomId;
-      renderRooms();
-
-      const meta = roomsMap[roomId] || { label: roomId, members: [] };
-      titleEl.textContent = (currentUser?.username || 'Guest') + ' • ' + (meta.label || roomId);
-      subtitleEl.textContent = roomId === 'Global' ? 'Public chat — visible to everyone' : `Members: ${meta.members ? meta.members.join(', ') : ''}`;
-      membersListEl.textContent = (meta.members && meta.members.length) ? meta.members.join(', ') : '';
-      deleteRoomBtn.style.display = (roomId !== 'Global' && currentUser && meta.members && meta.members.includes(currentUser.username)) ? 'inline-block' : 'none';
-
-      contentEl.innerHTML = '';
-      setLastSeen(roomId, Date.now());
-
-      const messagesCol = collection(db,'rooms',roomId,'messages');
-      const q = query(messagesCol, orderBy('clientTime','asc'));
-      messagesUnsub = onSnapshot(q, snap => {
-        if(messagesList.length === 0){
-          const docs = snap.docs.slice().sort((a,b)=>{
-            const A = a.data().clientTime || 0; const B = b.data().clientTime || 0; return A - B;
-          });
-          docs.forEach(d => { insertMessageOrdered(d.id, d.data()); });
-          scrollToBottom();
-        } else {
-          snap.docChanges().forEach(ch => {
-            if(ch.type === 'added'){
-              if(!messagesMap[ch.doc.id]){ insertMessageOrdered(ch.doc.id, ch.doc.data()); scrollToBottom(); }
-            } else if(ch.type === 'removed'){ removeMessage(ch.doc.id); }
-            else if(ch.type === 'modified'){ updateMessage(ch.doc.id, ch.doc.data()); }
-          });
-        }
-      }, err => console.error('messages onSnapshot error', err));
-    }
-
-    /**********************************************************************
-     * insertMessageOrdered - binary insert by clientTime
-     **********************************************************************/
-    function insertMessageOrdered(id, data){
-      if(messagesMap[id]) return;
-      const ts = data.clientTime || (data.createdAt && data.createdAt.toMillis && data.createdAt.toMillis()) || Date.now();
-      messagesMap[id] = {...data, clientTime: ts};
-
-      let lo = 0, hi = messagesList.length;
-      while(lo < hi){
-        const mid = Math.floor((lo+hi)/2);
-        const midId = messagesList[mid];
-        const midTime = messagesMap[midId].clientTime || 0;
-        if(midTime <= ts) lo = mid + 1; else hi = mid;
-      }
-      const index = lo;
-      messagesList.splice(index, 0, id);
-
-      const el = renderMessageDOM(id, messagesMap[id]);
-      messageElements[id] = el;
-      if(index >= contentEl.children.length) contentEl.appendChild(el);
-      else contentEl.insertBefore(el, contentEl.children[index]);
-    }
-
-    /**********************************************************************
-     * renderMessageDOM - create DOM for a message (with attachments & avatars)
-     **********************************************************************/
-    function renderMessageDOM(id, m){
-      const meName = (currentUser?.username || sessionStorage.getItem('username') || 'Guest').toString().trim();
-      const isMe = (m.from === meName);
-
-      const row = document.createElement('div'); row.className = 'message-row ' + (isMe ? 'me' : 'them'); row.dataset.id = id;
-
-      const bubble = document.createElement('div'); bubble.className = 'bubble ' + (isMe ? 'me' : 'them');
-
-      // header: avatar + username
-      const header = document.createElement('div'); header.className = 'message-header';
-
-      const avatarWrap = document.createElement('div'); avatarWrap.className = 'message-avatar';
-      const avatarImg = document.createElement('img');
-      avatarImg.setAttribute('alt', (m.from || 'User') + ' avatar');
-      avatarImg.setAttribute('data-avatar-for', m.uid || (m.from || 'guest'));
-      // set a fallback first
-      avatarImg.src = generateInitialsDataURL(m.from || 'U', 128);
-      // if we have cached profile pic for user, set it
-      if(m.uid && usersCache[m.uid] && usersCache[m.uid].profilePic){
-        avatarImg.src = usersCache[m.uid].profilePic;
-      } else if(m.uid && !usersCache[m.uid]){
-        // fetch user doc once (non-blocking)
-        (async ()=> {
-          try {
-            const udoc = await getDoc(doc(db,'users', m.uid));
-            if(udoc.exists()){
-              usersCache[m.uid] = { username: udoc.data().username || '', profilePic: udoc.data().profilePic || null };
-              if(usersCache[m.uid].profilePic){
-                avatarImg.src = usersCache[m.uid].profilePic;
-              }
-            }
-          } catch(e){ console.error('fetch user for avatar failed', e); }
-        })();
-      }
-
-      avatarWrap.appendChild(avatarImg);
-      const who = document.createElement('div'); who.style.fontWeight='700'; who.style.fontSize='13px'; who.textContent = (m.from || '') + (isMe ? ' • you' : '');
-      header.appendChild(avatarWrap); header.appendChild(who);
-
-      // message text
-      const text = document.createElement('div'); text.className = 'msg-text'; text.textContent = m.text || '';
-
-      // attachments (if any)
-      if(Array.isArray(m.attachments) && m.attachments.length){
-        m.attachments.forEach(att => {
-          const aWrap = document.createElement('div'); aWrap.className = 'chat-attachment';
-          if(att.type && att.type.startsWith('image/')){
-            const img = document.createElement('img');
-            img.src = att.url;
-            img.alt = att.name || 'image';
-            aWrap.appendChild(img);
-          } else {
-            const link = document.createElement('a'); link.href = att.url; link.target = '_blank'; link.rel = 'noopener';
-            link.textContent = '📎 ' + (att.name || 'file');
-            aWrap.appendChild(link);
-          }
-          bubble.appendChild(aWrap);
-        });
-      }
-
-      // meta
-      const meta = document.createElement('div'); meta.className = 'msg-meta'; meta.textContent = fmtTime(m.clientTime || m.createdAt);
-
-      bubble.appendChild(header);
-      bubble.appendChild(text);
-      bubble.appendChild(meta);
-
-      row.appendChild(bubble);
-      return row;
-    }
-
-    /**********************************************************************
-     * remove/update helpers
-     **********************************************************************/
-    function removeMessage(id){
-      const el = contentEl.querySelector(`[data-id="${id}"]`);
-      if(el) el.remove();
-      const idx = messagesList.indexOf(id); if(idx !== -1) messagesList.splice(idx,1);
-      delete messagesMap[id]; delete messageElements[id];
-    }
-    function updateMessage(id, data){
-      messagesMap[id] = {...messagesMap[id], ...data};
-      const old = contentEl.querySelector(`[data-id="${id}"]`);
-      const newEl = renderMessageDOM(id, messagesMap[id]);
-      if(old && old.parentNode) old.parentNode.replaceChild(newEl, old);
-      messageElements[id] = newEl;
-    }
-
-    /**********************************************************************
-     * scrollToBottom helper
-     **********************************************************************/
-    function scrollToBottom(){ requestAnimationFrame(()=> { try{ contentEl.scrollTop = contentEl.scrollHeight; } catch(e){} }); }
-
-    /**********************************************************************
-     * ATTACHMENTS: Upload file to Firebase Storage
-     * - returns { name, size, type, url }
-     **********************************************************************/
-    function sanitizeFilename(n){ return n.replace(/[^\w\-.]/g, '_'); }
-
-    function uploadFileToStorage(file, destPath, onProgress){
-      const ref = storageRef(storage, destPath);
-      const uploadTask = uploadBytesResumable(ref, file);
-      return new Promise((resolve, reject) => {
-        uploadTask.on('state_changed', snapshot => {
-          const pct = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          if(onProgress) onProgress(pct);
-        }, err => reject(err), async () => {
-          try {
-            const url = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve({ name: file.name, size: file.size, type: file.type, url });
-          } catch(e){ reject(e); }
-        });
-      });
-    }
-
-    /**********************************************************************
-     * Sending messages (with optional attachments)
-     * - If attachments staged, upload them first, then write message doc
-     * - Preserves clientTime and createdAt serverTimestamp
-     **********************************************************************/
-    sendBtn.addEventListener('click', sendMessage);
-    msgInput.addEventListener('keydown', e => { if(e.key === 'Enter') sendMessage(); });
-
-    async function sendMessage(){
-      if(!currentUser){ alert('Please log in to send messages.'); return; }
-      const text = msgInput.value.trim();
-      if(!text && stagedAttachments.length === 0) return;
-
-      // disable controls to prevent double send
-      sendBtn.disabled = true; msgInput.disabled = true;
-
-      try {
-        // upload attachments if any
-        let attachmentsMeta = [];
-        if(stagedAttachments.length){
-          // sequential uploads (could be parallel but keep it simpler & predictable)
-          for(let i=0;i<stagedAttachments.length;i++){
-            const f = stagedAttachments[i];
-            const safeName = sanitizeFilename(f.name);
-            const path = `attachments/${currentRoom}/${Date.now()}_${safeName}`;
-            // optional small progress UI could be shown here
-            const meta = await uploadFileToStorage(f, path, pct => {
-              // we could show progress; for now we keep it silent or log
-              // console.log(`upload ${f.name}: ${pct.toFixed(1)}%`);
-            });
-            attachmentsMeta.push(meta);
-          }
-        }
-
-        const payload = {
-          text: text || '',
-          from: currentUser.username,
-          uid: currentUser.uid,
-          clientTime: Date.now(),
-          createdAt: serverTimestamp(),
-          attachments: attachmentsMeta.length ? attachmentsMeta : []
-        };
-
-        await addDoc(collection(db,'rooms', currentRoom, 'messages'), payload);
-        msgInput.value = '';
-        stagedAttachments = [];
-        attachmentPreview.innerHTML = ''; attachmentPreview.style.display = 'none';
-        // mark lastSeen for current room so own message doesn't mark unread
-        setLastSeen(currentRoom, Date.now());
-      } catch(e){
-        console.error('send error', e);
-        alert('Send failed: ' + (e.message || e));
-      } finally {
-        sendBtn.disabled = false; msgInput.disabled = false;
-      }
-    }
-
-    /**********************************************************************
-     * Composer: attachment input handlers
-     **********************************************************************/
-    attachBtn.addEventListener('click', ()=> attachmentInput.click());
-    attachmentInput.addEventListener('change', (ev) => {
-      const files = Array.from(ev.target.files || []);
-      // clear old staged attachments
-      stagedAttachments = [];
-      attachmentPreview.innerHTML = '';
-      if(files.length === 0){ attachmentPreview.style.display = 'none'; return; }
-
-      files.forEach((f, idx) => {
-        stagedAttachments.push(f);
-        // show a preview thumbnail / file name
-        const wrapper = document.createElement('div'); wrapper.style.display='flex'; wrapper.style.flexDirection='column'; wrapper.style.alignItems='center'; wrapper.style.gap='6px';
-
-        if(f.type && f.type.startsWith('image/')){
-          const img = document.createElement('img'); img.className='attachment-preview'; img.src = URL.createObjectURL(f); img.alt = f.name;
-          wrapper.appendChild(img);
-        } else {
-          const box = document.createElement('div'); box.style.width='64px'; box.style.height='64px'; box.style.display='flex'; box.style.alignItems='center'; box.style.justifyContent='center'; box.style.borderRadius='8px'; box.style.border='1px solid rgba(0,0,0,0.06)'; box.style.fontSize='12px'; box.style.padding='6px'; box.textContent = f.name.slice(0,10);
-          wrapper.appendChild(box);
-        }
-
-        const fname = document.createElement('div'); fname.style.fontSize='11px'; fname.style.maxWidth='72px'; fname.style.overflow='hidden'; fname.style.textOverflow='ellipsis'; fname.style.whiteSpace='nowrap'; fname.textContent = f.name;
-        wrapper.appendChild(fname);
-
-        attachmentPreview.appendChild(wrapper);
-      });
-
-      attachmentPreview.style.display = 'flex';
-      attachmentPreview.setAttribute('aria-hidden','false');
-    });
-
-    /**********************************************************************
-     * Create / render user list for new group/private chats
-     **********************************************************************/
-    newChatBtn.addEventListener('click', async ()=>{
-      if(!currentUser){ alert('Log in to create chats'); return; }
-      createMsg.textContent = ''; groupLabel.value = '';
-      await loadAllUsers(); renderUsers(''); show(createModal);
-    });
-    createCancel.addEventListener('click', ()=> hide(createModal));
-    createClose.addEventListener('click', ()=> hide(createModal));
-    refreshUsersBtn.addEventListener('click', ()=> loadAllUsers());
-
-    let allUsers = []; // { uid, username, profilePic }
-    async function loadAllUsers(){
-      usersContainer.innerHTML = 'Loading...';
-      try {
-        const snap = await getDocs(collection(db,'users'));
-        allUsers = snap.docs.map(d => ({ uid: d.id, username: (d.data().username || d.data().email || '').toString().trim(), profilePic: d.data().profilePic || null }));
-        renderUsers(userSearch.value || '');
-      } catch(e){
-        console.error('load users failed', e);
-        usersContainer.innerHTML = 'Failed to load users';
-      }
-    }
-    function renderUsers(filter){
-      usersContainer.innerHTML = '';
-      const f = (filter||'').toLowerCase();
-      allUsers.filter(u => u.username && u.username.toLowerCase().includes(f) && u.username !== (currentUser?.username || sessionStorage.getItem('username')) )
-        .forEach(u => {
-          const div = document.createElement('div'); div.className = 'user-item';
-          const left = document.createElement('div'); left.style.display='flex'; left.style.alignItems='center'; left.style.gap='8px';
-          const avatar = document.createElement('div'); avatar.style.width='36px'; avatar.style.height='36px'; avatar.style.borderRadius='8px'; avatar.style.overflow='hidden'; avatar.style.flexShrink='0';
-          if(u.profilePic){ const im = document.createElement('img'); im.src = u.profilePic; im.style.width='100%'; im.style.height='100%'; im.style.objectFit='cover'; avatar.appendChild(im); }
-          else { avatar.textContent = (u.username||'').slice(0,2).toUpperCase(); avatar.style.display='flex'; avatar.style.alignItems='center'; avatar.style.justifyContent='center'; avatar.style.background='rgba(255,255,255,0.06)'; }
-
-          const nameSpan = document.createElement('div'); nameSpan.textContent = u.username;
-          left.appendChild(avatar); left.appendChild(nameSpan);
-
-          const right = document.createElement('div'); const cb = document.createElement('input'); cb.type='checkbox'; cb.dataset.username = u.username; cb.dataset.uid = u.uid;
-          right.appendChild(cb);
-
-          div.appendChild(left); div.appendChild(right);
-          usersContainer.appendChild(div);
-        });
-    }
-    userSearch.addEventListener('input', ()=> renderUsers(userSearch.value || ''));
-
-    createConfirm.addEventListener('click', async ()=>{
-      createMsg.textContent = '';
-      const checked = Array.from(usersContainer.querySelectorAll('input[type=checkbox]:checked'));
-      const selected = checked.map(c=>c.dataset.username);
-      if(selected.length === 0){ createMsg.textContent = 'Select at least one other user'; return; }
-      if(selected.length + 1 > 6){ createMsg.textContent = 'Max 6 members allowed'; return; }
-      const members = Array.from(new Set([...selected, currentUser.username]));
-      const roomId = makeRoomId(members);
-      const label = groupLabel.value.trim() || members.join(', ');
-      try{
-        await setDoc(doc(db,'roomsMeta', roomId), { label, members, createdBy: currentUser.username, lastUpdated: serverTimestamp() }, { merge: true });
-        roomsMap[roomId] = { label, members };
-        renderRooms();
-        hide(createModal);
-        switchRoom(roomId);
-      } catch(e){ console.error('create room error', e); createMsg.textContent = 'Create failed'; }
-    });
-
-    /**********************************************************************
-     * Delete room (meta + messages) - preserved original behavior
-     **********************************************************************/
-    deleteRoomBtn.addEventListener('click', async ()=>{
-      if(!currentUser) return;
-      if(currentRoom === 'Global'){ alert('Cannot delete Global'); return; }
-      if(!confirm('Delete this chat for everyone?')) return;
-      try{
-        await deleteAllMessagesInRoom(currentRoom);
-        await deleteDoc(doc(db,'roomsMeta', currentRoom));
-        delete roomsMap[currentRoom];
-        renderRooms();
-        switchRoom('Global');
-        alert('Deleted');
-      } catch(e){ console.error('delete room error', e); alert('Delete failed'); }
-    });
-
-    async function deleteAllMessagesInRoom(roomId){
-      const messagesCol = collection(db,'rooms',roomId,'messages');
-      while(true){
-        const qq = query(messagesCol, orderBy('clientTime','asc'), limit(100));
-        const snap = await getDocs(qq);
-        if(snap.empty) break;
-        const batch = writeBatch(db);
-        snap.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
-      }
-    }
-
-    /**********************************************************************
-     * Subscribe to Global on load (preserve original behavior)
-     **********************************************************************/
-    (function subscribeGlobal(){
-      roomsMap['Global'] = { label: '🌍 Global', members: [] };
-      renderRooms();
-      const globalCol = collection(db,'rooms','Global','messages');
-      const q = query(globalCol, orderBy('clientTime','asc'));
-      onSnapshot(q, snap => {
-        if(currentRoom === 'Global'){
-          if(messagesList.length === 0){
-            contentEl.innerHTML = '';
-            const docs = snap.docs.slice().sort((a,b)=>{
-              const A = a.data().clientTime || 0;
-              const B = b.data().clientTime || 0;
-              return A - B;
-            });
-            docs.forEach(d => insertMessageOrdered(d.id, d.data()));
-            scrollToBottom();
-          } else {
-            snap.docChanges().forEach(ch => {
-              if(ch.type === 'added' && !messagesMap[ch.doc.id]) insertMessageOrdered(ch.doc.id, ch.doc.data());
-              if(ch.type === 'removed') removeMessage(ch.doc.id);
-            });
-            scrollToBottom();
-          }
-        } else {
-          snap.docChanges().forEach(ch=>{
-            if(ch.type === 'added'){
-              const d = ch.doc.data();
-              const ts = d.clientTime || (d.createdAt && d.createdAt.toMillis && d.createdAt.toMillis()) || Date.now();
-              if(ts > getLastSeen('Global')){
-                unreadCounts['Global'] = (unreadCounts['Global'] || 0) + 1;
-                renderRooms();
-              }
-            }
-          });
-        }
-      }, err => console.error('global messages error', err));
-    })();
-
-    /**********************************************************************
-     * Settings modal logic: theme & profile preview & upload to Storage
-     * - When user uploads a profile pic, upload to Storage and set users/{uid}.profilePic
-     **********************************************************************/
-    settingsBtn.addEventListener('click', ()=> {
-      show(settingsModal);
-      const u = (currentUser && currentUser.username) || localStorage.getItem(USERNAME_KEY) || 'User';
-      // prefer user's profilePic from cache
-      if(currentUser && usersCache[currentUser.uid] && usersCache[currentUser.uid].profilePic){
-        profilePreview.src = usersCache[currentUser.uid].profilePic;
+/* =========================================================================
+   Auth State: keep behavior similar to original file
+   - When user authenticates, save username in users/{uid} doc (trimmed)
+   - Enable UI elements
+   - Subscribe to rooms for user
+   ========================================================================= */
+onAuthStateChanged(auth, async (u) => {
+  if(u){
+    // ensure users/{uid} doc exists with trimmed username - preserve original logic
+    try {
+      const uRef = doc(db,'users', u.uid);
+      const uSnap = await getDoc(uRef);
+      let username;
+      if(uSnap.exists()){
+        username = (uSnap.data().username || u.displayName || u.email.split('@')[0]).toString().trim();
+        await setDoc(uRef, { username, email: u.email }, { merge: true });
       } else {
-        // fallback to local stored or initials
-        const stored = localStorage.getItem(PROFILE_KEY);
-        profilePreview.src = stored || generateInitialsDataURL(u,128);
+        username = (u.displayName || u.email.split('@')[0]).toString().trim();
+        await setDoc(uRef, { username, email: u.email, createdAt: serverTimestamp() });
       }
-      profileUploadStatus.textContent = '';
+      currentUser = { uid: u.uid, email: u.email, username };
+      sessionStorage.setItem('username', username);
+      localStorage.setItem(USERNAME_KEY, username);
+    } catch(err){
+      console.error('user doc error', err);
+      currentUser = { uid: u.uid, email: u.email, username: (u.displayName || u.email.split('@')[0]).toString().trim() };
+      sessionStorage.setItem('username', currentUser.username);
+      localStorage.setItem(USERNAME_KEY, currentUser.username);
+    }
+
+    // enable UI
+    sendBtn.disabled = false;
+    msgInput.disabled = false;
+    newChatBtn.disabled = false;
+    loginBtn.textContent = 'Logout';
+    loginBtn.onclick = async ()=>{ await signOut(auth); location.reload(); };
+
+    // subscribe to rooms that contain this username
+    subscribeRoomsForUser(currentUser.username);
+
+    // Default to Global room (unchanged)
+    switchRoom('Global');
+
+    // update profile preview (in case username changed)
+    profilePreview.src = getLocalProfilePic(currentUser.username);
+  } else {
+    // not logged in
+    currentUser = null;
+    sendBtn.disabled = true;
+    msgInput.disabled = true;
+    newChatBtn.disabled = true;
+    loginBtn.textContent = 'Login / Sign up';
+    loginBtn.onclick = ()=> window.location.href = 'login.html';
+
+    // show only Global room
+    roomsMap = { Global: { label: '🌍 Global', members: [] } };
+    renderRooms();
+    switchRoom('Global');
+
+    // unsubscribe watchers
+    if(roomsUnsub){ roomsUnsub(); roomsUnsub = null; }
+    Object.keys(roomLastUnsubs).forEach(r => { if(roomLastUnsubs[r]) roomLastUnsubs[r](); delete roomLastUnsubs[r]; });
+  }
+
+  // apply saved theme
+  const saved = localStorage.getItem(THEME_KEY) || 'light';
+  document.body.setAttribute('data-theme', saved);
+  themeSelect.value = saved;
+});
+
+/* =========================================================================
+   Subscribe to rooms for a username (roomsMeta where members contains username)
+   - preserves original onSnapshot/query logic
+   ========================================================================= */
+function subscribeRoomsForUser(username){
+  if(roomsUnsub) roomsUnsub();
+  roomsMap = { Global: { label: '🌍 Global', members: [] } };
+  renderRooms();
+
+  // query roomsMeta where members array contains username
+  const q = query(collection(db,'roomsMeta'), where('members','array-contains', username));
+  roomsUnsub = onSnapshot(q, snap => {
+    snap.docChanges().forEach(change => {
+      const id = change.doc.id;
+      if(change.type === 'removed'){
+        delete roomsMap[id];
+        if(roomLastUnsubs[id]){ roomLastUnsubs[id](); delete roomLastUnsubs[id]; }
+        if(unreadCounts[id]) delete unreadCounts[id];
+        if(roomLastMessageTime[id]) delete roomLastMessageTime[id];
+      } else {
+        const d = change.doc.data();
+        const members = (d.members || []).map(m => (m||'').toString().trim());
+        roomsMap[id] = { label: d.label || id, members, createdBy: d.createdBy || null, lastUpdated: d.lastUpdated || null };
+      }
     });
+    renderRooms();
+    syncRoomMessageWatches();
+  }, err => console.error('roomsMeta snapshot error', err));
+}
 
-    closeSettings.addEventListener('click', ()=> hide(settingsModal));
-    closeSettingsBtn.addEventListener('click', ()=> hide(settingsModal));
+/* =========================================================================
+   renderRooms - rebuilds the sidebar list of rooms
+   - sorts: Global first, then alphabetical
+   - shows unread dot/count using unreadCounts
+   ========================================================================= */
+function renderRooms(){
+  roomsListEl.innerHTML = '';
 
-    themeSelect.addEventListener('change', ()=>{
-      const v = themeSelect.value; document.body.setAttribute('data-theme', v); localStorage.setItem(THEME_KEY, v);
+  const keys = Object.keys(roomsMap).sort((a,b) => {
+    if(a === 'Global') return -1;
+    if(b === 'Global') return 1;
+    return (roomsMap[a].label || a).localeCompare(roomsMap[b].label || b);
+  });
+
+  keys.forEach(id => {
+    const meta = roomsMap[id];
+    // build room button
+    const btn = document.createElement('button');
+    btn.className = 'room-btn' + (id === currentRoom ? ' active' : '');
+    btn.type = 'button';
+    btn.onclick = ()=> switchRoom(id);
+
+    const left = document.createElement('div');
+    left.className = 'room-left';
+
+    // unread dot if unreadCounts[id] > 0
+    const unread = (unreadCounts[id] || 0);
+    if(unread){
+      const dot = document.createElement('span');
+      dot.className = 'unread-badge';
+      dot.title = `${unread} unread`;
+      left.appendChild(dot);
+    } else {
+      const spacer = document.createElement('span');
+      spacer.className = 'unread-spacer';
+      spacer.style.display = 'inline-block';
+      spacer.style.width = '12px';
+      spacer.style.marginRight = '8px';
+      left.appendChild(spacer);
+    }
+
+    // avatar (initials from label or room id)
+    const avatar = document.createElement('div');
+    avatar.className = 'room-avatar';
+    const labelText = (meta.label || id) + '';
+    avatar.textContent = labelText.split(' ')[0].slice(0,2).toUpperCase();
+    left.appendChild(avatar);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'room-label';
+    lbl.textContent = meta.label || id;
+    left.appendChild(lbl);
+
+    btn.appendChild(left);
+
+    const right = document.createElement('div');
+    right.style.display = 'flex'; right.style.alignItems = 'center'; right.style.gap = '8px';
+
+    const m = document.createElement('div');
+    m.className = 'room-meta';
+    m.textContent = (meta.members && meta.members.length) ? `${meta.members.length}m` : '';
+    right.appendChild(m);
+
+    if(unread > 1){
+      const cnt = document.createElement('span'); cnt.className = 'unread-count'; cnt.textContent = String(unread);
+      right.appendChild(cnt);
+    }
+
+    btn.appendChild(right);
+    roomsListEl.appendChild(btn);
+  });
+}
+
+/* =========================================================================
+   syncRoomMessageWatches
+   - sets up lightweight listeners per room to detect most recent message
+   - used to show unread indicator without reading all messages
+   - similar approach used previously
+   ========================================================================= */
+function syncRoomMessageWatches(){
+  const want = Object.keys(roomsMap);
+  want.forEach(roomId => {
+    if(roomLastUnsubs[roomId]) return; // already watching
+    try {
+      const messagesCol = collection(db,'rooms',roomId,'messages');
+      const q = query(messagesCol, orderBy('clientTime','desc'), limit(1));
+      roomLastUnsubs[roomId] = onSnapshot(q, snap => {
+        if(snap.empty){
+          roomLastMessageTime[roomId] = 0;
+          return;
+        }
+        const d = snap.docs[0].data();
+        const ts = d.clientTime || (d.createdAt && d.createdAt.toMillis && d.createdAt.toMillis()) || Date.now();
+        const prev = roomLastMessageTime[roomId] || 0;
+        roomLastMessageTime[roomId] = ts;
+
+        const lastSeen = getLastSeen(roomId);
+        if(roomId !== currentRoom && ts > lastSeen){
+          unreadCounts[roomId] = (unreadCounts[roomId] || 0) + 1;
+          renderRooms();
+        }
+      }, err => console.error('room last message watcher error', roomId, err));
+    } catch(e){
+      console.error('watch setup error', e);
+    }
+  });
+
+  // clean up watchers no longer needed
+  Object.keys(roomLastUnsubs).forEach(r => {
+    if(!roomsMap[r]){
+      roomLastUnsubs[r](); delete roomLastUnsubs[r];
+    }
+  });
+}
+
+/* =========================================================================
+   switchRoom
+   - unsubscribes previous message stream
+   - subscribes full stream for the given room (messages collection)
+   - keeps original behavior: sorts by clientTime asc, preserves binary insert behavior
+   ========================================================================= */
+async function switchRoom(roomId){
+  // attempt to fetch meta if unknown (unchanged)
+  if(roomId !== 'Global' && !roomsMap[roomId]){
+    try{
+      const metaSnap = await getDoc(doc(db,'roomsMeta',roomId));
+      if(metaSnap.exists()){
+        const d = metaSnap.data();
+        roomsMap[roomId] = { label: d.label || roomId, members: (d.members || []).map(m => (m||'').toString().trim()), createdBy: d.createdBy || null, lastUpdated: d.lastUpdated || null };
+      } else {
+        roomsMap[roomId] = { label: roomId, members: [] };
+      }
+    } catch(e){
+      roomsMap[roomId] = { label: roomId, members: [] };
+    }
+    renderRooms();
+  }
+
+  // unsubscribe old messages
+  if(messagesUnsub){ messagesUnsub(); messagesUnsub = null; }
+  messagesList = []; messagesMap = {}; messageElements = {};
+  currentRoom = roomId;
+  renderRooms();
+
+  const meta = roomsMap[roomId] || { label: roomId, members: [] };
+  titleEl.textContent = (currentUser?.username || 'Guest') + ' • ' + (meta.label || roomId);
+  subtitleEl.textContent = roomId === 'Global' ? 'Public chat — visible to everyone' : `Members: ${meta.members ? meta.members.join(', ') : ''}`;
+  membersListEl.textContent = (meta.members && meta.members.length) ? meta.members.join(', ') : '';
+  deleteRoomBtn.style.display = (roomId !== 'Global' && currentUser && meta.members && meta.members.includes(currentUser.username)) ? 'inline-block' : 'none';
+
+  // clear content area
+  contentEl.innerHTML = '';
+
+  // mark as read (local)
+  setLastSeen(roomId, Date.now());
+
+  // subscribe to messages (full stream)
+  const messagesCol = collection(db,'rooms',roomId,'messages');
+  const q = query(messagesCol, orderBy('clientTime','asc'));
+  messagesUnsub = onSnapshot(q, snap=>{
+    // initial full load if messagesList empty
+    if(messagesList.length === 0){
+      const docs = snap.docs.slice().sort((a,b)=>{
+        const A = a.data().clientTime || 0;
+        const B = b.data().clientTime || 0;
+        return A - B;
+      });
+      docs.forEach(d => {
+        const id = d.id; const data = d.data();
+        insertMessageOrdered(id, data);
+      });
+      scrollToBottom();
+    } else {
+      // incremental
+      snap.docChanges().forEach(ch => {
+        if(ch.type === 'added'){
+          if(!messagesMap[ch.doc.id]){
+            insertMessageOrdered(ch.doc.id, ch.doc.data());
+            // auto-scroll heuristic: always scroll for now
+            scrollToBottom();
+          }
+        } else if(ch.type === 'removed'){
+          removeMessage(ch.doc.id);
+        } else if(ch.type === 'modified'){
+          updateMessage(ch.doc.id, ch.doc.data());
+        }
+      });
+    }
+  }, err => console.error('messages onSnapshot error', err));
+}
+
+/* =========================================================================
+   insertMessageOrdered
+   - binary insert into messagesList by clientTime to preserve chronological order
+   - then render DOM element and insert at the right index
+   ========================================================================= */
+function insertMessageOrdered(id, data){
+  if(messagesMap[id]) return;
+  const ts = data.clientTime || (data.createdAt && data.createdAt.toMillis && data.createdAt.toMillis()) || Date.now();
+  messagesMap[id] = {...data, clientTime: ts};
+
+  // binary search to find insertion index
+  let lo = 0, hi = messagesList.length;
+  while(lo < hi){
+    const mid = Math.floor((lo+hi)/2);
+    const midId = messagesList[mid];
+    const midTime = messagesMap[midId].clientTime || 0;
+    if(midTime <= ts) lo = mid + 1; else hi = mid;
+  }
+  const index = lo;
+  messagesList.splice(index, 0, id);
+
+  // create and insert DOM element
+  const el = renderMessageDOM(id, messagesMap[id]);
+  messageElements[id] = el;
+  if(index >= contentEl.children.length){
+    contentEl.appendChild(el);
+  } else {
+    contentEl.insertBefore(el, contentEl.children[index]);
+  }
+}
+
+/* =========================================================================
+   renderMessageDOM
+   - constructs message DOM using either user's profile pic or initials avatar
+   - default avatar: first two letters of sender's name (trimmed)
+   - uses local profile pic for currentUser when sending
+   ========================================================================= */
+function renderMessageDOM(id, m){
+  const meName = (currentUser?.username || sessionStorage.getItem('username') || 'Guest').toString().trim();
+  const isMe = (m.from === meName);
+
+  const row = document.createElement('div');
+  row.className = 'message-row ' + (isMe ? 'me' : 'them');
+  row.dataset.id = id;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble ' + (isMe ? 'me' : 'them');
+
+  // header: avatar + username
+  const header = document.createElement('div');
+  header.style.display = 'flex';
+  header.style.alignItems = 'center';
+  header.style.gap = '10px';
+  header.style.marginBottom = '8px';
+
+  // avatar element (img if available)
+  const avatarWrap = document.createElement('div');
+  avatarWrap.style.width = '40px';
+  avatarWrap.style.height = '40px';
+  avatarWrap.style.borderRadius = '8px';
+  avatarWrap.style.overflow = 'hidden';
+  avatarWrap.style.flexShrink = '0';
+
+  const avatarImg = document.createElement('img');
+  avatarImg.style.width = '100%';
+  avatarImg.style.height = '100%';
+  avatarImg.style.objectFit = 'cover';
+
+  // choose avatar source:
+  // - if this message is from the current user and they have uploaded profile pic -> use it
+  // - else check for localStorage profile keyed by username (we don't write to Firestore)
+  // - else generate initials avatar dynamically
+  const sender = (m.from || '').toString().trim();
+  let avatarSrc = null;
+
+  try {
+    // If sender is current user and local profile exists, prefer it
+    if(isMe){
+      avatarSrc = localStorage.getItem(PROFILE_KEY) || null;
+    }
+    if(!avatarSrc){
+      // try per-username stored profile (not implemented server-side; kept local-only)
+      // fallback to initials generator
+      avatarSrc = generateInitialsDataURL(sender || 'U', 128);
+    }
+  } catch(e){
+    console.error('avatar select error', e);
+    avatarSrc = generateInitialsDataURL(sender || 'U', 128);
+  }
+
+  avatarImg.src = avatarSrc;
+  avatarWrap.appendChild(avatarImg);
+
+  // username label
+  const who = document.createElement('div');
+  who.style.fontWeight = '700';
+  who.style.fontSize = '13px';
+  who.textContent = sender + (isMe ? ' • you' : '');
+
+  header.appendChild(avatarWrap);
+  header.appendChild(who);
+
+  const text = document.createElement('div');
+  text.textContent = m.text || '';
+  text.style.whiteSpace = 'pre-wrap';
+
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  meta.textContent = fmtTime(m.clientTime || m.createdAt);
+
+  bubble.appendChild(header);
+  bubble.appendChild(text);
+  bubble.appendChild(meta);
+
+  row.appendChild(bubble);
+  return row;
+}
+
+/* =========================================================================
+   removeMessage / updateMessage
+   ========================================================================= */
+function removeMessage(id){
+  const el = contentEl.querySelector(`[data-id="${id}"]`);
+  if(el) el.remove();
+  const idx = messagesList.indexOf(id);
+  if(idx !== -1) messagesList.splice(idx,1);
+  delete messagesMap[id];
+  delete messageElements[id];
+}
+
+function updateMessage(id, data){
+  messagesMap[id] = {...messagesMap[id], ...data};
+  const old = contentEl.querySelector(`[data-id="${id}"]`);
+  const newEl = renderMessageDOM(id, messagesMap[id]);
+  if(old && old.parentNode) old.parentNode.replaceChild(newEl, old);
+  messageElements[id] = newEl;
+}
+
+/* =========================================================================
+   scrollToBottom helper
+   ========================================================================= */
+function scrollToBottom(){
+  requestAnimationFrame(()=> { try{ contentEl.scrollTop = contentEl.scrollHeight; } catch(e){} });
+}
+
+/* =========================================================================
+   Sending messages (preserve original semantics)
+   - stores text, from (username), uid, clientTime, createdAt: serverTimestamp()
+   ========================================================================= */
+sendBtn.addEventListener('click', sendMessage);
+msgInput.addEventListener('keydown', e => { if(e.key === 'Enter') sendMessage(); });
+
+async function sendMessage(){
+  if(!currentUser){ alert('Please log in to send messages.'); return; }
+  const text = msgInput.value.trim();
+  if(!text) return;
+  const payload = {
+    text,
+    from: currentUser.username,
+    uid: currentUser.uid,
+    clientTime: Date.now(),
+    createdAt: serverTimestamp()
+  };
+  try {
+    await addDoc(collection(db,'rooms', currentRoom, 'messages'), payload);
+    msgInput.value = '';
+    // mark lastSeen for current room so own message doesn't mark unread
+    setLastSeen(currentRoom, Date.now());
+  } catch(e){
+    console.error('send error', e);
+    alert('Send failed: ' + (e.message || e));
+  }
+}
+
+/* =========================================================================
+   Create / render user list for new group/private chats
+   - preserves original 'users' collection read behavior
+   ========================================================================= */
+newChatBtn.addEventListener('click', async ()=>{
+  if(!currentUser){ alert('Log in to create chats'); return; }
+  createMsg.textContent = '';
+  groupLabel.value = '';
+  await loadAllUsers();
+  renderUsers('');
+  show(createModal);
+});
+createCancel.addEventListener('click', ()=> hide(createModal));
+createClose.addEventListener('click', ()=> hide(createModal));
+refreshUsersBtn.addEventListener('click', ()=> loadAllUsers());
+
+let allUsers = []; // {uid, username}
+async function loadAllUsers(){
+  usersContainer.innerHTML = 'Loading...';
+  try{
+    const snap = await getDocs(collection(db,'users'));
+    allUsers = snap.docs.map(d => ({ uid: d.id, username: (d.data().username || d.data().email || '').toString().trim() }));
+    renderUsers(userSearch.value || '');
+  } catch(e){
+    console.error('load users failed', e);
+    usersContainer.innerHTML = 'Failed to load users';
+  }
+}
+function renderUsers(filter){
+  usersContainer.innerHTML = '';
+  const f = (filter||'').toLowerCase();
+  allUsers.filter(u => u.username && u.username.toLowerCase().includes(f) && u.username !== (currentUser?.username || sessionStorage.getItem('username')) )
+    .forEach(u=>{
+      const div = document.createElement('div'); div.className='user-item';
+      const left = document.createElement('div'); left.textContent = u.username;
+      const right = document.createElement('div');
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.dataset.username = u.username; cb.dataset.uid = u.uid;
+      right.appendChild(cb);
+      div.appendChild(left); div.appendChild(right);
+      usersContainer.appendChild(div);
     });
-    (function initTheme(){ const saved = localStorage.getItem(THEME_KEY) || 'light'; document.body.setAttribute('data-theme', saved); themeSelect.value = saved; })();
+}
+userSearch.addEventListener('input', ()=> renderUsers(userSearch.value || ''));
 
-    // Profile upload: upload to Storage, update users/{uid}.profilePic
-    profileUpload.addEventListener('change', async (ev) => {
-      const f = ev.target.files && ev.target.files[0];
-      if(!f){ profileUploadStatus.textContent = ''; return; }
-      if(!currentUser){ alert('Please log in to set profile picture'); return; }
+/* create group */
+createConfirm.addEventListener('click', async ()=>{
+  createMsg.textContent = '';
+  const checked = Array.from(usersContainer.querySelectorAll('input[type=checkbox]:checked'));
+  const selected = checked.map(c=>c.dataset.username);
+  if(selected.length === 0){ createMsg.textContent = 'Select at least one other user'; return; }
+  if(selected.length + 1 > 6){ createMsg.textContent = 'Max 6 members allowed'; return; }
+  const members = Array.from(new Set([...selected, currentUser.username]));
+  const roomId = makeRoomId(members);
+  const label = groupLabel.value.trim() || members.join(', ');
+  try{
+    await setDoc(doc(db,'roomsMeta', roomId), { label, members, createdBy: currentUser.username, lastUpdated: serverTimestamp() }, { merge: true });
+    roomsMap[roomId] = { label, members };
+    renderRooms();
+    hide(createModal);
+    switchRoom(roomId);
+  } catch(e){ console.error('create room error', e); createMsg.textContent = 'Create failed'; }
+});
 
-      try {
-        profileUploadStatus.textContent = 'Uploading...';
-        const safeName = sanitizeFilename(f.name);
-        const path = `profilePics/${currentUser.uid}_${Date.now()}_${safeName}`;
-        const meta = await uploadFileToStorage(f, path, pct => {
-          profileUploadStatus.textContent = `Uploading... ${Math.round(pct)}%`;
+/* =========================================================================
+   Delete room (meta + messages) - preserved original behavior
+   ========================================================================= */
+deleteRoomBtn.addEventListener('click', async ()=>{
+  if(!currentUser) return;
+  if(currentRoom === 'Global'){ alert('Cannot delete Global'); return; }
+  if(!confirm('Delete this chat for everyone?')) return;
+  try{
+    await deleteAllMessagesInRoom(currentRoom);
+    await deleteDoc(doc(db,'roomsMeta', currentRoom));
+    delete roomsMap[currentRoom];
+    renderRooms();
+    switchRoom('Global');
+    alert('Deleted');
+  } catch(e){ console.error('delete room error', e); alert('Delete failed'); }
+});
+
+async function deleteAllMessagesInRoom(roomId){
+  const messagesCol = collection(db,'rooms',roomId,'messages');
+  while(true){
+    const qq = query(messagesCol, orderBy('clientTime','asc'), limit(100));
+    const snap = await getDocs(qq);
+    if(snap.empty) break;
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }
+}
+
+/* =========================================================================
+   Subscribe to Global on load (preserve original behavior)
+   ========================================================================= */
+(function subscribeGlobal(){
+  roomsMap['Global'] = { label: '🌍 Global', members: [] };
+  renderRooms();
+  const globalCol = collection(db,'rooms','Global','messages');
+  const q = query(globalCol, orderBy('clientTime','asc'));
+  onSnapshot(q, snap => {
+    if(currentRoom === 'Global'){
+      if(messagesList.length === 0){
+        contentEl.innerHTML = '';
+        const docs = snap.docs.slice().sort((a,b)=>{
+          const A = a.data().clientTime || 0;
+          const B = b.data().clientTime || 0;
+          return A - B;
         });
-        const url = meta.url;
-        // update users/{uid}
-        await setDoc(doc(db,'users', currentUser.uid), { profilePic: url }, { merge: true });
-        // update localStorage and preview
-        localStorage.setItem(PROFILE_KEY, url);
-        profilePreview.src = url;
-        profileUploadStatus.textContent = 'Saved';
-      } catch(e){
-        console.error('profile upload failed', e);
-        profileUploadStatus.textContent = 'Upload failed';
-        alert('Profile upload failed: ' + (e.message || e));
+        docs.forEach(d => insertMessageOrdered(d.id, d.data()));
+        scrollToBottom();
+      } else {
+        snap.docChanges().forEach(ch => {
+          if(ch.type === 'added' && !messagesMap[ch.doc.id]) insertMessageOrdered(ch.doc.id, ch.doc.data());
+          if(ch.type === 'removed') removeMessage(ch.doc.id);
+        });
+        scrollToBottom();
       }
-    });
-
-    /**********************************************************************
-     * Open room from query param support (unchanged)
-     **********************************************************************/
-    (function openRoomFromQuery(){
-      const r = new URLSearchParams(location.search).get('room');
-      if(r){
-        (async ()=>{
-          try{
-            const m = await getDoc(doc(db,'roomsMeta',r));
-            if(m.exists()) roomsMap[r] = m.data();
-            else roomsMap[r] = { label:r, members: [] };
+    } else {
+      // if not in Global, mark unread as messages arrive
+      snap.docChanges().forEach(ch=>{
+        if(ch.type === 'added'){
+          const d = ch.doc.data();
+          const ts = d.clientTime || (d.createdAt && d.createdAt.toMillis && d.createdAt.toMillis()) || Date.now();
+          if(ts > getLastSeen('Global')){
+            unreadCounts['Global'] = (unreadCounts['Global'] || 0) + 1;
             renderRooms();
-            switchRoom(r);
-          } catch(e){ console.error(e); }
-        })();
-      }
-    })();
-
-    /**********************************************************************
-     * Modal backdrop click to close
-     **********************************************************************/
-    [createModal, settingsModal].forEach(mod => {
-      mod.addEventListener('click', (ev)=>{ if(ev.target === mod) hide(mod); });
-    });
-
-    /**********************************************************************
-     * ESC closes modals
-     **********************************************************************/
-    document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape'){ hide(createModal); hide(settingsModal); } });
-
-    /**********************************************************************
-     * Init: ensure watchers
-     **********************************************************************/
-    setTimeout(()=>syncRoomMessageWatches(), 400);
-
-    /**********************************************************************
-     * UX niceties
-     **********************************************************************/
-    msgInput.addEventListener('focus', ()=> { setTimeout(()=> scrollToBottom(), 120); });
-
-    /**********************************************************************
-     * Auth flow: onAuthStateChanged
-     * - mirrors original logic: ensure users/{uid} doc exists
-     * - we also load users cache and subscribe to rooms
-     **********************************************************************/
-    onAuthStateChanged(auth, async (u) => {
-      if(u){
-        try {
-          const uRef = doc(db,'users', u.uid);
-          const uSnap = await getDoc(uRef);
-          let username;
-          if(uSnap.exists()){
-            username = (uSnap.data().username || u.displayName || u.email.split('@')[0]).toString().trim();
-            await setDoc(uRef, { username, email: u.email }, { merge: true });
-          } else {
-            username = (u.displayName || u.email.split('@')[0]).toString().trim();
-            await setDoc(uRef, { username, email: u.email, createdAt: serverTimestamp() });
           }
-          currentUser = { uid: u.uid, email: u.email, username };
-          sessionStorage.setItem('username', username); localStorage.setItem(USERNAME_KEY, username);
-        } catch(err){
-          console.error('user doc error', err);
-          currentUser = { uid: u.uid, email: u.email, username: (u.displayName || u.email.split('@')[0]).toString().trim() };
-          sessionStorage.setItem('username', currentUser.username); localStorage.setItem(USERNAME_KEY, currentUser.username);
         }
+      });
+    }
+  }, err => console.error('global messages error', err));
+})();
 
-        sendBtn.disabled = false; msgInput.disabled = false; newChatBtn.disabled = false;
-        loginBtn.textContent = 'Logout'; loginBtn.onclick = async ()=>{ await signOut(auth); location.reload(); };
+/* =========================================================================
+   Settings modal logic (themes + profile preview)
+   - ensures close button color uses --close-color and is visible in all themes
+   ========================================================================= */
+settingsBtn.addEventListener('click', ()=> {
+  show(settingsModal);
+  // set preview from local storage or generate from username
+  const stored = localStorage.getItem(PROFILE_KEY);
+  const u = (currentUser && currentUser.username) || localStorage.getItem(USERNAME_KEY) || 'User';
+  profilePreview.src = stored || generateInitialsDataURL(u,128);
+});
 
-        // subscribe rooms & open Global
-        subscribeRoomsForUser(currentUser.username);
-        switchRoom('Global');
+/* close handlers */
+closeSettings.addEventListener('click', ()=> hide(settingsModal));
+closeSettingsBtn.addEventListener('click', ()=> hide(settingsModal));
 
-        // fetch and cache user's profilePic from Firestore (if exists)
-        try {
-          const userDoc = await getDoc(doc(db,'users', currentUser.uid));
-          if(userDoc.exists()){
-            const pdata = userDoc.data();
-            if(pdata.profilePic){ localStorage.setItem(PROFILE_KEY, pdata.profilePic); profilePreview.src = pdata.profilePic; }
-          }
-        } catch(e){ console.error('loading user profilePic error', e); }
+/* theme select */
+themeSelect.addEventListener('change', ()=>{
+  const v = themeSelect.value;
+  document.body.setAttribute('data-theme', v);
+  localStorage.setItem(THEME_KEY, v);
+});
 
-      } else {
-        currentUser = null; sendBtn.disabled = true; msgInput.disabled = true; newChatBtn.disabled = true;
-        loginBtn.textContent = 'Login / Sign up'; loginBtn.onclick = ()=> window.location.href = 'login.html';
-        roomsMap = { Global: { label: '🌍 Global', members: [] } }; renderRooms(); switchRoom('Global');
-        if(roomsUnsub){ roomsUnsub(); roomsUnsub = null; }
-        Object.keys(roomLastUnsubs).forEach(r => { if(roomLastUnsubs[r]) roomLastUnsubs[r](); delete roomLastUnsubs[r]; });
-      }
+/* initialize theme */
+(function initTheme(){ const saved = localStorage.getItem(THEME_KEY) || 'light'; document.body.setAttribute('data-theme', saved); themeSelect.value = saved; })();
 
-      // Apply saved theme
-      const saved = localStorage.getItem(THEME_KEY) || 'light';
-      document.body.setAttribute('data-theme', saved);
-      themeSelect.value = saved;
-    });
-
-    /**********************************************************************
-     * Initial load of rooms/Global
-     **********************************************************************/
-    (async function initialSetup(){
-      // Preload Global room in map & render
-      roomsMap['Global'] = { label: '🌍 Global', members: [] };
-      renderRooms();
+/* =========================================================================
+   Open room via query param ?room=roomId (keeps original)
+   ========================================================================= */
+(function openRoomFromQuery(){
+  const r = new URLSearchParams(location.search).get('room');
+  if(r){
+    (async ()=>{
+      try{
+        const m = await getDoc(doc(db,'roomsMeta',r));
+        if(m.exists()) roomsMap[r] = m.data();
+        else roomsMap[r] = { label:r, members: [] };
+        renderRooms();
+        switchRoom(r);
+      } catch(e){ console.error(e); }
     })();
+  }
+})();
 
-    /**********************************************************************
-     * End of script
-     **********************************************************************/
-  </script>
+/* =========================================================================
+   Modal backdrop click to close
+   ========================================================================= */
+[createModal, settingsModal].forEach(mod => {
+  mod.addEventListener('click', (ev)=>{
+    if(ev.target === mod) hide(mod);
+  });
+});
+
+/* =========================================================================
+   Keyboard ESC to close modals
+   ========================================================================= */
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape'){
+    hide(createModal);
+    hide(settingsModal);
+  }
+});
+
+/* =========================================================================
+   Ensure initial watchers are created after a short delay
+   ========================================================================= */
+setTimeout(()=>syncRoomMessageWatches(), 400);
+
+/* =========================================================================
+   Small UX helpers (not touching chat mechanics)
+   - prevent mobile page zoom weirdness when focusing input (soft fix)
+   ========================================================================= */
+msgInput.addEventListener('focus', ()=> {
+  // tiny UX improvement: scroll content so last message isn't obscured
+  setTimeout(()=> scrollToBottom(), 120);
+});
+
+/* =========================================================================
+   End of script
+   ========================================================================= */
+</script>
+
 </body>
 </html>
